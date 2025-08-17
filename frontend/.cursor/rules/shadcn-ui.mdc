@@ -1,0 +1,86 @@
+---
+alwaysApply: true
+---
+## Rules
+
+- Always try to use the shadcn/ui library.
+- Always try to use framer-motion.
+- You must use Tailwind CSS for styling.
+- You must install any ShadcnUI missing component with `pnpm dlx shadcn@2.3.0 add <component-name />`. dont change / add flags / modify the command
+- Wait longer for the install command output. It should output "Created X file" or "Skipped x files" if the component already existed. "Skipped x files" is also a success. 
+- Follow Shadcn UI component guidelines and best practices.
+- Ensure UI is responsive and accessible.
+
+These are the shadcn commonly used components:
+
+- Accordion
+- Alert
+- Alert Dialog
+- Aspect Ratio
+- Avatar
+- Badge
+- Breadcrumb
+- Button
+- Calendar
+- Card
+- Carousel
+- Chart
+- Checkbox
+- Collapsible
+- Combobox
+- Command
+- Context Menu
+- Data Table
+- Date Picker
+- Dialog
+- Drawer
+- Dropdown Menu
+- React Hook Form
+- Hover Card
+- Input
+- Input OTP
+- Label
+- Menubar
+- Navigation Menu
+- Pagination
+- Popover
+- Progress
+- Radio Group
+- Resizable
+- Scroll-area
+- Select
+- Separator
+- Sheet
+- Sidebar
+- Skeleton
+- Slider
+- Sonner
+- Switch
+- Table
+- Tabs
+- Textarea
+- Toast
+- Toggle
+- Toggle Group
+- Tooltip
+- Typography
+
+## Visual Design
+- Establish a clear visual hierarchy to guide user attention.
+- Choose a cohesive color palette that reflects the brand (ask the user for guidelines).
+- Use typography effectively for readability and emphasis.
+- Maintain sufficient contrast for legibility (WCAG 2.1 AA standard).
+- Design with a consistent style across the application.
+
+##  Interaction Design
+- Create intuitive navigation patterns.
+- Use familiar UI components to reduce cognitive load.
+- Provide clear calls-to-action to guide user behavior.
+- Implement responsive design for cross-device compatibility.
+- Use animations judiciously to enhance user experience.
+
+## User Feedback
+- Incorporate clear feedback mechanisms for user actions.
+- Use loading indicators for asynchronous operations.
+- Provide clear error messages and recovery options.
+- Implement analytics to track user behavior and pain points.

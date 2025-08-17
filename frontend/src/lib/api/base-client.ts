@@ -1,0 +1,122 @@
+// Base API Client with common functionality
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
+export class BaseApiClient {
+  protected baseUrl: string
+  protected token?: string
+
+  constructor(baseUrl: string = API_BASE_URL) {
+    this.baseUrl = baseUrl
+  }
+
+  setToken(token: string) {
+    this.token = token
+  }
+
+  protected async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`
+    
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+
+    // Add custom headers if provided
+    if (options.headers) {
+      if (options.headers instanceof Headers) {
+        options.headers.forEach((value, key) => {
+          headers[key] = value
+        })
+      } else if (Array.isArray(options.headers)) {
+        options.headers.forEach(([key, value]) => {
+          headers[key] = value
+        })
+      } else if (typeof options.headers === 'object') {
+        Object.assign(headers, options.headers)
+      }
+    }
+
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    })
+
+    if (!response.ok) {
+      const error = new Error(`API Error: ${response.status} ${response.statusText}`)
+      // Add status property to error object for better error handling
+      ;(error as any).status = response.status
+      ;(error as any).statusText = response.statusText
+      throw error
+    }
+
+    // Handle 204 No Content responses
+    if (response.status === 204) {
+      return {} as T
+    }
+
+    return response.json()
+  }
+
+  protected async requestWithHeaders<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<{ data: T; headers: Headers }> {
+    const url = `${this.baseUrl}${endpoint}`
+    
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+
+    // Add custom headers if provided
+    if (options.headers) {
+      if (options.headers instanceof Headers) {
+        options.headers.forEach((value, key) => {
+          headers[key] = value
+        })
+      } else if (Array.isArray(options.headers)) {
+        options.headers.forEach(([key, value]) => {
+          headers[key] = value
+        })
+      } else if (typeof options.headers === 'object') {
+        Object.assign(headers, options.headers)
+      }
+    }
+
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    })
+
+    if (!response.ok) {
+      const error = new Error(`API Error: ${response.status} ${response.statusText}`)
+      // Add status property to error object for better error handling
+      ;(error as any).status = response.status
+      ;(error as any).statusText = response.statusText
+      throw error
+    }
+
+    // Handle 204 No Content responses
+    if (response.status === 204) {
+      return { data: {} as T, headers: response.headers }
+    }
+
+    const data = await response.json()
+    return { data, headers: response.headers }
+  }
+
+  // Health check
+  async healthCheck(): Promise<{ status: string }> {
+    return this.request<{ status: string }>('/api/v1/health')
+  }
+}
