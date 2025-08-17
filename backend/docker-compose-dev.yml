@@ -1,0 +1,64 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: hr-backend-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower
+    container_name: hr-backend-flower
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  mongo:
+    image: mongodb/mongodb-atlas-local
+    volumes:
+      - mongo-dataz:/data/db
+      # Time synchronization
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=${TZ:-UTC}
+    env_file:
+      - ./configs/.env
+    ports:
+      - "27017:27017"
+    networks:
+      - tyro-network
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+      # Time synchronization
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=${TZ:-UTC}
+    env_file:
+      - ./configs/.env
+    networks:
+      - tyro-network
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+
+networks:
+  tyro-network:
+
+volumes:
+  mongo-dataz:
+  minio-data:
+  redis_data:
