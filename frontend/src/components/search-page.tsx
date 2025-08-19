@@ -104,6 +104,7 @@ export function AddPositionPage() {
   const [newCertification, setNewCertification] = useState("")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const { toast } = useToast()
   const jobPositionsClient = new JobPositionsClient()
@@ -125,6 +126,14 @@ export function AddPositionPage() {
       ...prev,
       [field]: value
     }))
+    // Clear error when field is updated
+    if (errors[field]) {
+      setErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[field]
+        return newErrors
+      })
+    }
   }
 
   const updateNestedFormData = (parent: keyof JobFormData, field: string, value: any) => {
@@ -135,6 +144,16 @@ export function AddPositionPage() {
         [field]: value
       }
     }))
+    // Clear error when nested field is updated
+    const errorKey = parent === 'location' ? (field === 'country' ? 'country' : 'town') : 
+                    parent === 'contactInfo' ? (field === 'name' ? 'contactName' : field === 'email' ? 'contactEmail' : 'contactPhone') : ''
+    if (errorKey && errors[errorKey]) {
+      setErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[errorKey]
+        return newErrors
+      })
+    }
   }
 
   const addSkill = () => {
@@ -206,10 +225,65 @@ export function AddPositionPage() {
     return WorkArrangement.ON_SITE
   }
 
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {}
+    
+    // Basic Information validation
+    if (!formData.jobTitle.trim()) {
+      newErrors.jobTitle = "Job title is required"
+    }
+    if (!formData.company.trim()) {
+      newErrors.company = "Company name is required"
+    }
+    if (!formData.summary.trim()) {
+      newErrors.summary = "Job summary is required"
+    }
+    if (!formData.location.country.trim()) {
+      newErrors.country = "Country is required"
+    }
+    if (!formData.location.town.trim()) {
+      newErrors.town = "Town/City is required"
+    }
+    if (!formData.responsibilities.trim()) {
+      newErrors.responsibilities = "Job responsibilities are required"
+    }
+    
+    // Contact Information validation
+    if (!formData.contactInfo.name.trim()) {
+      newErrors.contactName = "Contact name is required"
+    }
+    if (!formData.contactInfo.email.trim()) {
+      newErrors.contactEmail = "Contact email is required"
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactInfo.email)) {
+      newErrors.contactEmail = "Please enter a valid email address"
+    }
+    if (!formData.contactInfo.phone.trim()) {
+      newErrors.contactPhone = "Contact phone is required"
+    }
+    
+    // Skills validation
+    if (formData.skills.length === 0) {
+      newErrors.skills = "At least one skill is required"
+    }
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (isSubmitting) return
+    
+    // Validate form before submission
+    if (!validateForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields correctly.",
+        variant: "destructive",
+      })
+      return
+    }
     
     setIsSubmitting(true)
     
@@ -455,8 +529,11 @@ export function AddPositionPage() {
                             value={formData.jobTitle}
                             onChange={(e) => updateFormData("jobTitle", e.target.value)}
                             placeholder="e.g., Senior Frontend Developer"
-                            className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                            className={`border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.jobTitle ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
+                          {errors.jobTitle && (
+                            <p className="text-sm text-red-600">{errors.jobTitle}</p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="company" className="text-sm font-medium">Company *</Label>
@@ -465,8 +542,11 @@ export function AddPositionPage() {
                             value={formData.company}
                             onChange={(e) => updateFormData("company", e.target.value)}
                             placeholder="e.g., TechCorp Inc."
-                            className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                            className={`border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.company ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
+                          {errors.company && (
+                            <p className="text-sm text-red-600">{errors.company}</p>
+                          )}
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -476,8 +556,11 @@ export function AddPositionPage() {
                           value={formData.summary}
                           onChange={(e) => updateFormData("summary", e.target.value)}
                           placeholder="Brief description of the role..."
-                          className="min-h-[100px] border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                          className={`min-h-[100px] border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.summary ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                         />
+                        {errors.summary && (
+                          <p className="text-sm text-red-600">{errors.summary}</p>
+                        )}
                       </div>
                     </div>
 
@@ -497,8 +580,11 @@ export function AddPositionPage() {
                             value={formData.location.country}
                             onChange={(e) => updateNestedFormData("location", "country", e.target.value)}
                             placeholder="e.g., United States"
-                            className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                            className={`border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.country ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
+                          {errors.country && (
+                            <p className="text-sm text-red-600">{errors.country}</p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="town" className="text-sm font-medium">Town/City *</Label>
@@ -507,8 +593,11 @@ export function AddPositionPage() {
                             value={formData.location.town}
                             onChange={(e) => updateNestedFormData("location", "town", e.target.value)}
                             placeholder="e.g., San Francisco"
-                            className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                            className={`border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.town ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
+                          {errors.town && (
+                            <p className="text-sm text-red-600">{errors.town}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center space-x-6">
@@ -590,7 +679,7 @@ export function AddPositionPage() {
                      <div className="space-y-4">
                        <div className="flex items-center gap-3">
                          <Briefcase className="h-5 w-5 text-orange-600" />
-                         <h3 className="text-lg font-semibold text-gray-900">Skills</h3>
+                         <h3 className="text-lg font-semibold text-gray-900">Skills *</h3>
                        </div>
                        <div className="space-y-3">
                          <div className="space-y-3">
@@ -656,6 +745,9 @@ export function AddPositionPage() {
                               <Plus className="h-4 w-4" />
                             </Button>
                           </div>
+                          {errors.skills && (
+                            <p className="text-sm text-red-600">{errors.skills}</p>
+                          )}
                          </div>
                        </div>
                      </div>
@@ -759,14 +851,17 @@ export function AddPositionPage() {
                        </div>
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label htmlFor="responsibilities" className="text-sm font-medium">Key Responsibilities</Label>
+                          <Label htmlFor="responsibilities" className="text-sm font-medium">Key Responsibilities *</Label>
                           <Textarea
                             id="responsibilities"
                             value={formData.responsibilities}
                             onChange={(e) => updateFormData("responsibilities", e.target.value)}
                             placeholder="List the main responsibilities for this role..."
-                            className="min-h-[100px] border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                            className={`min-h-[100px] border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.responsibilities ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
+                          {errors.responsibilities && (
+                            <p className="text-sm text-red-600">{errors.responsibilities}</p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="recruiterNotes" className="text-sm font-medium">Recruiter Notes</Label>
@@ -797,8 +892,11 @@ export function AddPositionPage() {
                             value={formData.contactInfo.name}
                             onChange={(e) => updateNestedFormData("contactInfo", "name", e.target.value)}
                             placeholder="e.g., John Doe"
-                            className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                            className={`border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.contactName ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
+                          {errors.contactName && (
+                            <p className="text-sm text-red-600">{errors.contactName}</p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="contactEmail" className="text-sm font-medium">Email *</Label>
@@ -808,18 +906,24 @@ export function AddPositionPage() {
                             value={formData.contactInfo.email}
                             onChange={(e) => updateNestedFormData("contactInfo", "email", e.target.value)}
                             placeholder="e.g., john@company.com"
-                            className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                            className={`border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.contactEmail ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
+                          {errors.contactEmail && (
+                            <p className="text-sm text-red-600">{errors.contactEmail}</p>
+                          )}
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="contactPhone" className="text-sm font-medium">Phone</Label>
+                          <Label htmlFor="contactPhone" className="text-sm font-medium">Phone *</Label>
                           <Input
                             id="contactPhone"
                             value={formData.contactInfo.phone}
                             onChange={(e) => updateNestedFormData("contactInfo", "phone", e.target.value)}
                             placeholder="e.g., +1 (555) 123-4567"
-                            className="border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                            className={`border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${errors.contactPhone ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
+                          {errors.contactPhone && (
+                            <p className="text-sm text-red-600">{errors.contactPhone}</p>
+                          )}
                         </div>
                       </div>
                     </div>
