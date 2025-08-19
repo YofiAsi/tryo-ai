@@ -1,0 +1,6 @@
+beanie
+fastapi
+minio
+pydantic
+pydantic-settings
+tiktoken
