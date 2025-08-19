@@ -9,7 +9,7 @@ from app.consts.ai_models import AIModel
 
 class CreateTaskDTO(BaseModel):
     """Request model for creating a new task"""
-    type: TaskType
+    type: str
     multitask: bool = Field(default=False, description="Should split to several tasks (will process each batch separately)")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
 
@@ -58,10 +58,6 @@ class TaskDTO(BaseModel):
             errors=task.errors,
             metadata=task.metadata,
         )
-
-
-class CreateTaskResponseDTO(BaseModel):
-    tasks: List[TaskDTO]
 
 
 class TaskStatusDTO(BaseModel):

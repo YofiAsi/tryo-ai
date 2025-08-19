@@ -10,9 +10,10 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 
-from app.schema.task_dto import CreateTaskDTO, CreateTaskResponseDTO
+from app.schema.task_dto import CreateTaskDTO, TaskDTO
 from app.service.task_create_service import TaskCreateService
 from app.conf.dependencies import get_task_create_service
+from app.entity.task_entity import TaskType, Task
 
 _resource = "manager"
 _path = f"/api/v1/{_resource}"
@@ -27,7 +28,7 @@ router = APIRouter(prefix=_path, tags=[_resource])
     name="create_task",
     summary="Create a new task",
     description="Creates a new task for processing requests through OpenAI Batch API",
-    response_model=CreateTaskResponseDTO,
+    response_model=list[TaskDTO],
     status_code=status.HTTP_201_CREATED
 )
 async def create_task(
@@ -54,11 +55,18 @@ async def create_task(
             )
         
         # Create tasks using the service
-        result = await task_create_service.create_tasks(create_task_dto, file)
+        tasks: list[Task] = await task_create_service.create_tasks(
+            task_type=TaskType(create_task_dto.type),
+            multitask=create_task_dto.multitask,
+            file=file.file,
+            metadata=create_task_dto.metadata,
+        )
+
+        result = [TaskDTO.from_entity(task) for task in tasks]
         
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
-            content=result.dict()
+            content=result
         )
         
     except Exception as e:

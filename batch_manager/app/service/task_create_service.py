@@ -1,21 +1,17 @@
 import logging
-import uuid
 import tiktoken
 import asyncio
 import tempfile
 import shutil
-from typing import TextIO
-from typing import List, Dict, Any, AsyncGenerator, Tuple
-from fastapi import UploadFile
-from datetime import datetime
+from typing import TextIO, Optional, Iterator
+from typing import List, Dict, Any, Tuple
 from pathlib import Path
-import os
 import json
+from typing import BinaryIO
 
 from app.consts.ai_models import AIModel
-from app.schema.task_dto import CreateTaskDTO, CreateTaskResponseDTO, TaskDTO
-from app.entity.task_entity import Task, TaskStatus, TaskType
-from app.entity.batch_entity import Batch, BatchStatus
+from app.entity.task_entity import Task, TaskType
+from app.entity.batch_entity import Batch
 from app.repository.task_repository import TaskRepository
 from app.repository.batch_repository import BatchRepository
 from app.repository.file_storage_repository import FileStorageRepository, FileMetadata
@@ -35,16 +31,23 @@ class BatchFileHandler:
         self.file_handle: TextIO = open(self.file_path, "w", encoding="utf-8")
 
 class TaskHandler:
-    def __init__(self, task_dto: CreateTaskDTO):
-        self.task_dto: CreateTaskDTO = task_dto
+    def __init__(
+            self,
+            task_type: TaskType,
+            multitask: bool,
+            metadata: Optional[Dict[str, Any]] = None,
+            ):
+        self.task_type = task_type
+        self.multitask = multitask
+        self.metadata = metadata
         self.tasks: list[Task] = []
     
     def add_prepared_batch(self, batch: Batch) -> None:
         task: Task = None
-        if self.task_dto.multitask or len(self.tasks) == 0:
+        if self.multitask or len(self.tasks) == 0:
             task = Task(
-                task_type=self.task_dto.type,
-                metadata=self.task_dto.metadata,
+                task_type=self.task_type,
+                metadata=self.metadata,
             )
             self.tasks.append(task)
         else:
@@ -68,7 +71,13 @@ class TaskCreateService:
         self.tmp_dir: Path = None
         _log.debug("TaskCreateService initialized")
 
-    async def create_tasks(self, create_task_dto: CreateTaskDTO, file: UploadFile) -> CreateTaskResponseDTO:
+    async def create_tasks(
+            self,
+            task_type: TaskType, 
+            multitask: bool, 
+            file: BinaryIO,
+            metadata: Optional[Dict[str, Any]] = None,
+        ) -> list[Task]:
         """
         Create tasks based on the provided DTO and file.
         
@@ -76,27 +85,27 @@ class TaskCreateService:
         If multitask is False: Creates a single task with multiple batches
         
         Args:
-            create_task_dto: The task creation configuration
+            task_type: The type of task to create
+            multitask: Whether to create multiple tasks
+            metadata: The metadata for the task
             file: The uploaded JSONL file containing requests
             
         Returns:
-            CreateTaskResponseDTO containing the created tasks
+            List of created tasks
         """
         _log.info(f"Creating tasks")
         
-        self.task_handler = TaskHandler(create_task_dto)
+        self.task_handler = TaskHandler(task_type, multitask, metadata)
         self.model_to_batch_map = {}
         self.tmp_dir = Path(tempfile.mkdtemp())
 
         try:
-            await self._handle_line_batching_from_file(file)
+            self._handle_line_batching_from_file(file)
             await self._upload_batch_files_parallel()
             await self._save_batches_to_db()
             await self._save_tasks_to_db()
 
-            return CreateTaskResponseDTO(
-                tasks=[TaskDTO.from_entity(task) for task in self.task_handler.tasks]
-            )
+            return self.task_handler.tasks
 
         except Exception as e:
             _log.error(f"Error creating tasks: {str(e)}")
@@ -107,11 +116,11 @@ class TaskCreateService:
         finally:
             self._delete_tmp_files()
 
-    async def _handle_line_batching_from_file(self, file: UploadFile) -> None:
+    def _handle_line_batching_from_file(self, file: BinaryIO) -> None:
         if self.task_handler is None:
             raise BusinessException(ErrorCodes.INTERNAL_ERROR, "Task handler not initialized")
         
-        async for line, line_size in self._read_file_lines_with_size(file):
+        for line, line_size in self._read_file_lines_with_size(file):
             json_line = self._get_json_line_from_line(line)
             model = self._get_model_from_json(json_line)
             estimated_tokens = self._count_tokens_from_json(json_line)
@@ -124,7 +133,6 @@ class TaskCreateService:
                 estimated_tokens=estimated_tokens,
                 batch_file_handler=self.model_to_batch_map[model][-1],
                 line_size=line_size,
-                line=line
             ):
                 self._close_batch_file(self.model_to_batch_map[model][-1])
                 self.model_to_batch_map[model].append(BatchFileHandler(model, self.tmp_dir))
@@ -210,8 +218,8 @@ class TaskCreateService:
             _log.error(f"Error counting tokens from JSON line: {json_line}")
             raise
 
-    async def _read_file_lines_with_size(self, file: UploadFile) -> AsyncGenerator[Tuple[str, int], None]:
-        async for line_bytes in file:
+    def _read_file_lines_with_size(self, file: BinaryIO) -> Iterator[Tuple[str, int]]:
+        for line_bytes in file:
             line_size = len(line_bytes)
             line = line_bytes.decode('utf-8').strip()
             if not line:
