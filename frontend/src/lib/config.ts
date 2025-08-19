@@ -9,7 +9,7 @@ export const config = {
   oauth: {
     google: {
       clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '111073171763-1n5di4no5bkak2sbl5l2lpq40kdog7vf.apps.googleusercontent.com',
-      redirectUri: import.meta.env.VITE_OAUTH_REDIRECT_URI || 'http://localhost:5173/login',
+      redirectUri: import.meta.env.VITE_OAUTH_REDIRECT_URI || 'http://localhost:8000/login',
       scope: 'openid email profile',
       responseType: 'code',
     },

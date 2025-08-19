@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Chrome, Loader2, CheckCircle } from "lucide-react"
@@ -14,9 +14,10 @@ import { generateGoogleOAuthUrl, storeOAuthState, generateOAuthState } from "@/l
 export function LoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { login, user, isAuthenticated } = useAuth()
+  const { login: authLogin, user, isAuthenticated } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [isProcessingCallback, setIsProcessingCallback] = useState(false)
+  const hasProcessedCallback = useRef(false)
 
   // Check for OAuth callback
   useEffect(() => {
@@ -24,7 +25,8 @@ export function LoginPage() {
     const code = searchParams.get('code')
     const state = searchParams.get('state')
     
-    if (code && !isAuthenticated) {
+    if (code && !isAuthenticated && !hasProcessedCallback.current) {
+      hasProcessedCallback.current = true
       handleOAuthCallback(code, state || undefined)
     }
   }, [searchParams, isAuthenticated])
@@ -45,14 +47,8 @@ export function LoginPage() {
       // Process the OAuth callback
       const response = await apiClient.auth.googleCallback(code, state)
       
-      // Store the token
-      localStorage.setItem('auth_token', response.token.access_token)
-      
-      // Set the token in the API client
-      apiClient.setToken(response.token.access_token)
-      
-      // Update auth context
-      await login()
+      // Login with the token (this will fetch user data and update auth state)
+      await authLogin(response.token.access_token)
       
       // Redirect to dashboard
       navigate("/")

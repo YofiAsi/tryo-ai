@@ -1,0 +1,23 @@
+# Development stage
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy package files first
+COPY package.json pnpm-lock.yaml ./
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code after installing dependencies
+COPY . .
+
+# Expose port 80
+EXPOSE 80
+
+# Start the development server
+CMD ["pnpm", "run", "dev", "--host", "0.0.0.0", "--port", "80"]
