@@ -1,6 +1,8 @@
 services:
   tyro-nginx:
-    image: tyro-nginx:latest
+    build:
+      context: ../tyro-nginx/
+      dockerfile: Dockerfile
     container_name: tyro-nginx
     ports:
       - "8000:80"
@@ -16,6 +18,9 @@ services:
       context: ../tyro-backend-api/
       dockerfile: Dockerfile.dev
     container_name: tyro-backend-api
+    depends_on:
+      - mongo
+      - redis
     volumes:
       - ../tyro-backend-api:/app
     networks:

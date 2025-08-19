@@ -1,6 +1,6 @@
 services:
   tyro-nginx:
-    image: tyro-nginx:latest
+    image: ghcr.io/tyroai/tyro-nginx/tyro-nginx:main
     container_name: tyro-nginx
     ports:
       - "8000:80"
