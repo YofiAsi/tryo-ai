@@ -10,9 +10,9 @@ import json
 from typing import BinaryIO
 
 from app.consts.ai_models import AIModel
-from app.entity.task_entity import Task, TaskType
+from app.entity.batch_task_entity import BatchTask, BatchTaskType
 from app.entity.batch_entity import Batch
-from app.repository.task_repository import TaskRepository
+from app.repository.batch_task_repository import BatchTaskRepository
 from app.repository.batch_repository import BatchRepository
 from app.repository.file_storage_repository import FileStorageRepository, FileMetadata
 from app.consts.rate_limits import MAX_REQUESTS_PER_BATCH, MODEL_MAX_BATCH_QUEUE_LIMIT_PER_PROJECT_TPD, MAX_BATCH_INPUT_FILE_SIZE_BYTES
@@ -30,72 +30,74 @@ class BatchFileHandler:
         self.file_path: Path = tmp_dir / f"{self.entity.batch_id}.jsonl"
         self.file_handle: TextIO = open(self.file_path, "w", encoding="utf-8")
 
-class TaskHandler:
-    def __init__(
-            self,
-            task_type: TaskType,
-            multitask: bool,
-            metadata: Optional[Dict[str, Any]] = None,
-            ):
-        self.task_type = task_type
-        self.multitask = multitask
-        self.metadata = metadata
-        self.tasks: list[Task] = []
-    
-    def add_prepared_batch(self, batch: Batch) -> None:
-        task: Task = None
-        if self.multitask or len(self.tasks) == 0:
-            task = Task(
-                task_type=self.task_type,
-                metadata=self.metadata,
-            )
-            self.tasks.append(task)
-        else:
-            task = self.tasks[0]
-        task.add_batch(batch)
+    def add_line(self, line: str, estimated_tokens: int) -> None:
+        self.file_handle.write(line + "\n")
+        self.entity.estimated_tokens += estimated_tokens
+        self.entity.total_requests += 1
 
-class TaskCreateService:
+    def close(self) -> None:
+        if not self.file_handle.closed:
+            self.file_handle.close()
+
+    def will_exceed_limits(self, estimated_tokens: int, line_size: int) -> bool:
+        if self._exceeds_token_limit(estimated_tokens):
+            return True
+        if self._exceeds_request_limit():
+            return True
+        if self._exceeds_file_size_limit(line_size):
+            return True
+        return False
+
+    def _exceeds_token_limit(self, estimated_tokens: int) -> bool:
+        return self.entity.estimated_tokens + estimated_tokens > MODEL_MAX_BATCH_QUEUE_LIMIT_PER_PROJECT_TPD[self.entity.ai_model] * TOKENS_RATE_LIMIT_THRESHOLD_MULTIPLIER
+
+    def _exceeds_request_limit(self) -> bool:
+        return self.entity.total_requests + 1 > MAX_REQUESTS_PER_BATCH
+
+    def _exceeds_file_size_limit(self, line_size: int) -> bool:
+        return self.file_handle.tell() + line_size > MAX_BATCH_INPUT_FILE_SIZE_BYTES
+
+
+class BatchTaskCreateService:
     """
-    Task Service class
+    BatchTask Service class
     
-    This service handles task creation and management, including the logic for
-    creating single or multiple tasks based on the multitask configuration.
+    This service handles batch_task creation and management, including the logic for
+    creating single or multiple tasks based on the batch_task type.
     """
     
-    def __init__(self, task_repository: TaskRepository, batch_repository: BatchRepository, file_storage_repository: FileStorageRepository):
-        self.task_repository = task_repository
+    def __init__(self, batch_task_repository: BatchTaskRepository, batch_repository: BatchRepository, file_storage_repository: FileStorageRepository):
+        self.batch_task_repository = batch_task_repository
         self.batch_repository = batch_repository
         self.file_storage_repository = file_storage_repository
         self.model_to_batch_map: Dict[AIModel, List[BatchFileHandler]] = {}
-        self.task_handler: TaskHandler = None
+        self.batch_task: BatchTask = None
         self.tmp_dir: Path = None
-        _log.debug("TaskCreateService initialized")
+        _log.debug("BatchTaskCreateService initialized")
 
-    async def create_tasks(
+    async def create_task(
             self,
-            task_type: TaskType, 
-            multitask: bool, 
+            batch_task_type: BatchTaskType, 
             file: BinaryIO,
             metadata: Optional[Dict[str, Any]] = None,
-        ) -> list[Task]:
+        ) -> BatchTask:
         """
-        Create tasks based on the provided DTO and file.
-        
-        If multitask is True: Creates multiple tasks, each with a single batch
-        If multitask is False: Creates a single task with multiple batches
+        Create batch_task based on the provided DTO and file.
         
         Args:
-            task_type: The type of task to create
-            multitask: Whether to create multiple tasks
-            metadata: The metadata for the task
+            batch_task_type: The type of batch_task to create
+            metadata: The metadata for the batch_task
             file: The uploaded JSONL file containing requests
             
         Returns:
-            List of created tasks
+            Created batch_task
         """
-        _log.info(f"Creating tasks")
+        _log.info(f"Creating batch_task")
         
-        self.task_handler = TaskHandler(task_type, multitask, metadata)
+        self.batch_task = BatchTask(
+            batch_task_type=batch_task_type,
+            metadata=metadata,
+        )
         self.model_to_batch_map = {}
         self.tmp_dir = Path(tempfile.mkdtemp())
 
@@ -103,9 +105,9 @@ class TaskCreateService:
             self._handle_line_batching_from_file(file)
             await self._upload_batch_files_parallel()
             await self._save_batches_to_db()
-            await self._save_tasks_to_db()
+            saved_task = await self._save_task_to_db()
 
-            return self.task_handler.tasks
+            return saved_task
 
         except Exception as e:
             _log.error(f"Error creating tasks: {str(e)}")
@@ -117,8 +119,8 @@ class TaskCreateService:
             self._delete_tmp_files()
 
     def _handle_line_batching_from_file(self, file: BinaryIO) -> None:
-        if self.task_handler is None:
-            raise BusinessException(ErrorCodes.INTERNAL_ERROR, "Task handler not initialized")
+        if self.batch_task is None:
+            raise BusinessException(ErrorCodes.INTERNAL_ERROR, "BatchTask not initialized")
         
         for line, line_size in self._read_file_lines_with_size(file):
             json_line = self._get_json_line_from_line(line)
@@ -128,31 +130,23 @@ class TaskCreateService:
             if model not in self.model_to_batch_map:
                 self.model_to_batch_map[model] = [BatchFileHandler(model, self.tmp_dir)]
             
-            # Check if can proceed with the current batch, if not, add to task and create a new batch
-            if self._check_limit_exceeded(
-                estimated_tokens=estimated_tokens,
-                batch_file_handler=self.model_to_batch_map[model][-1],
-                line_size=line_size,
-            ):
-                self._close_batch_file(self.model_to_batch_map[model][-1])
+            # Check if can proceed with the current batch, if not, add to batch_task and create a new batch
+            if self.model_to_batch_map[model][-1].will_exceed_limits(estimated_tokens, line_size):
+                self.model_to_batch_map[model][-1].close()
                 self.model_to_batch_map[model].append(BatchFileHandler(model, self.tmp_dir))
             
-            self._add_line_to_batch(
+            self.model_to_batch_map[model][-1].add_line(
                 line=line,
                 estimated_tokens=estimated_tokens,
-                batch_file_handler=self.model_to_batch_map[model][-1]
             )
 
         self._add_batches_to_task()
     
-    def _close_batch_file(self, batch_file_handler: BatchFileHandler) -> None:
-        batch_file_handler.file_handle.close()
-
     def _delete_tmp_files(self) -> None:
         for batch_file_handlers in self.model_to_batch_map.values():
             for batch_file_handler in batch_file_handlers:
                 if batch_file_handler.file_path.exists():
-                    batch_file_handler.file_handle.close()
+                    batch_file_handler.close()
         
         # Clean up temporary directory
         if self.tmp_dir.exists():
@@ -164,30 +158,7 @@ class TaskCreateService:
     def _add_batches_to_task(self) -> None:
         for batch_file_handlers in self.model_to_batch_map.values():
             for batch_file_handler in batch_file_handlers:
-                self.task_handler.add_prepared_batch(batch_file_handler.entity)
-
-    def _add_line_to_batch(self, line: str, estimated_tokens: int, batch_file_handler: BatchFileHandler) -> None:
-        batch_file_handler.file_handle.write(line + "\n")
-        batch_file_handler.entity.estimated_tokens += estimated_tokens
-        batch_file_handler.entity.total_requests += 1
-
-    def _check_limit_exceeded(self, estimated_tokens: int, batch_file_handler: BatchFileHandler, line_size: int) -> bool:
-        if self._exceeds_token_limit(estimated_tokens, batch_file_handler):
-            return True
-        if self._exceeds_request_limit(batch_file_handler):
-            return True
-        if self._exceeds_file_size_limit(batch_file_handler, line_size):
-            return True
-        return False
-
-    def _exceeds_token_limit(self, estimated_tokens: int, batch_file_handler: BatchFileHandler) -> bool:
-        return batch_file_handler.entity.estimated_tokens + estimated_tokens > MODEL_MAX_BATCH_QUEUE_LIMIT_PER_PROJECT_TPD[batch_file_handler.entity.ai_model] * TOKENS_RATE_LIMIT_THRESHOLD_MULTIPLIER
-
-    def _exceeds_request_limit(self, batch_file_handler: BatchFileHandler) -> bool:
-        return batch_file_handler.entity.total_requests + 1 > MAX_REQUESTS_PER_BATCH
-
-    def _exceeds_file_size_limit(self, batch_file_handler: BatchFileHandler, line_size: int) -> bool:
-        return batch_file_handler.file_handle.tell() + line_size > MAX_BATCH_INPUT_FILE_SIZE_BYTES
+                self.batch_task.add_batch(batch_file_handler.entity)
 
     def _get_json_line_from_line(self, line: str) -> Dict[str, Any]:
         try:
@@ -226,7 +197,7 @@ class TaskCreateService:
                 continue
             yield line, line_size
 
-    async def _upload_batch_files_parallel(self) -> Dict[str, FileMetadata]:
+    async def _upload_batch_files(self) -> Dict[str, FileMetadata]:
         """
         Upload all batch files from model_to_batch_map in parallel to the file storage repository.
         
@@ -248,11 +219,8 @@ class TaskCreateService:
         
         for batch_file_handlers in self.model_to_batch_map.values():
             for batch_file_handler in batch_file_handlers:
-                # Close the file handle before uploading
-                if not batch_file_handler.file_handle.closed:
-                    batch_file_handler.file_handle.close()
-                
-                # Create upload task
+                batch_file_handler.close()
+
                 upload_task = self._upload_single_batch_file(batch_file_handler)
                 upload_tasks.append(upload_task)
                 batch_handlers.append(batch_file_handler)
@@ -360,21 +328,20 @@ class TaskCreateService:
             _log.error(f"Failed to save batches to database: {str(e)}")
             raise
 
-    async def _save_tasks_to_db(self) -> None:
+    async def _save_task_to_db(self) -> BatchTask:
         """
-        Save all task entities to the database using bulk operations for efficiency.
+        Save batch_task entity to the database.
         """
-        if not self.task_handler or not self.task_handler.tasks:
-            _log.warning("No tasks to save to database")
+        if not self.batch_task:
+            _log.warning("No batch_task to save to database")
             return
         
-        tasks_to_save = self.task_handler.tasks
-        _log.info(f"Saving {len(tasks_to_save)} tasks to database using bulk operation")
+        _log.info(f"Saving batch_task to database")
         
         try:
-            # Use bulk create for efficient database insertion
-            saved_tasks = await self.task_repository.bulk_create(tasks_to_save)
-            _log.info(f"Successfully saved {len(saved_tasks)} tasks to database")
+            saved_task = await self.batch_task_repository.create(self.batch_task)
+            _log.info(f"Successfully saved batch_task to database")
+            return saved_task
         except Exception as e:
-            _log.error(f"Failed to save tasks to database: {str(e)}")
+            _log.error(f"Failed to save batch_task to database: {str(e)}")
             raise

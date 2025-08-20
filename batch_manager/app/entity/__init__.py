@@ -1,9 +1,9 @@
 import logging
 
 from app.entity.batch_entity import Batch
-from app.entity.task_entity import Task
+from app.entity.batch_task_entity import BatchTask
 
-entities = [Batch, Task]
+entities = [Batch, BatchTask]
 log = logging.getLogger(__name__)
 
 

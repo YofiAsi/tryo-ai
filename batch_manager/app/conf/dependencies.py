@@ -4,9 +4,9 @@ Dependency injection configuration for FastAPI
 import logging
 from functools import lru_cache
 
-from app.service.task_create_service import TaskCreateService
+from app.service.batch_task_create_service import BatchTaskCreateService
 from app.repository.batch_repository import BatchRepository
-from app.repository.task_repository import TaskRepository
+from app.repository.batch_task_repository import BatchTaskRepository
 from app.repository.file_storage_repository import FileStorageRepository
 
 _log = logging.getLogger(__name__)
@@ -19,9 +19,9 @@ def get_batch_repository() -> BatchRepository:
 
 
 @lru_cache()
-def get_task_repository() -> TaskRepository:
-    """Get TaskRepository instance"""
-    return TaskRepository()
+def get_batch_task_repository() -> BatchTaskRepository:
+    """Get BatchTaskRepository instance"""
+    return BatchTaskRepository()
 
 
 @lru_cache()
@@ -31,9 +31,9 @@ def get_file_storage_repository() -> FileStorageRepository:
 
 
 @lru_cache()
-def get_task_create_service() -> TaskCreateService:
-    """Get TaskCreateService instance"""
+def get_batch_task_create_service() -> BatchTaskCreateService:
+    """Get BatchTaskCreateService instance"""
     batch_repo = get_batch_repository()
-    task_repo = get_task_repository()
+    batch_task_repo = get_batch_task_repository()
     file_storage_repo = get_file_storage_repository()
-    return TaskCreateService(task_repository=task_repo, batch_repository=batch_repo, file_storage_repository=file_storage_repo)
+    return BatchTaskCreateService(batch_task_repository=batch_task_repo, batch_repository=batch_repo, file_storage_repository=file_storage_repo)

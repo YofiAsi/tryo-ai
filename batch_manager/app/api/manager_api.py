@@ -10,10 +10,10 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 
-from app.schema.task_dto import CreateTaskDTO, TaskDTO
-from app.service.task_create_service import TaskCreateService
-from app.conf.dependencies import get_task_create_service
-from app.entity.task_entity import TaskType, Task
+from app.schema.batch_task_dto import CreateBatchTaskDTO, BatchTaskDTO
+from app.service.batch_task_create_service import BatchTaskCreateService
+from app.conf.dependencies import get_batch_task_create_service
+from app.entity.batch_task_entity import BatchTaskType, BatchTask
 
 _resource = "manager"
 _path = f"/api/v1/{_resource}"
@@ -24,27 +24,26 @@ router = APIRouter(prefix=_path, tags=[_resource])
 
 @router.post(
     path="/",
-    operation_id="create_task",
-    name="create_task",
-    summary="Create a new task",
-    description="Creates a new task for processing requests through OpenAI Batch API",
-    response_model=list[TaskDTO],
+    operation_id="create_batch_task",
+    name="create_batch_task",
+    summary="Create a new batch task",
+    description="Creates a new batch task for processing requests through OpenAI Batch API",
+    response_model=BatchTaskDTO,
     status_code=status.HTTP_201_CREATED
 )
-async def create_task(
+async def create_batch_task(
     request: Request,
-    create_task_dto: CreateTaskDTO,
+    create_batch_task_dto: CreateBatchTaskDTO,
     file: UploadFile = File(...),
-    task_create_service: TaskCreateService = Depends(get_task_create_service)
+    batch_task_create_service: BatchTaskCreateService = Depends(get_batch_task_create_service)
 ) -> JSONResponse:
     """
-    Create a new task for OpenAI batch processing.
+    Create a new batch task for OpenAI batch processing.
     
-    This endpoint creates one or more tasks based on the multitask configuration.
-    If multitask is True, creates multiple tasks each with a single batch.
-    If multitask is False, creates a single task with multiple batches.
+    This endpoint creates a batch task that can manage multiple OpenAI batches
+    for processing requests through the OpenAI Batch API.
     """
-    _log.info(f"Creating task with type: {create_task_dto.type}, multitask: {create_task_dto.multitask}")
+    _log.info(f"Creating batch task with type: {create_batch_task_dto.type}")
     
     try:
         # Validate file format
@@ -54,15 +53,14 @@ async def create_task(
                 content={"error": "File must be in JSONL format"}
             )
         
-        # Create tasks using the service
-        tasks: list[Task] = await task_create_service.create_tasks(
-            task_type=TaskType(create_task_dto.type),
-            multitask=create_task_dto.multitask,
+        # Create batch task using the service
+        batch_task: BatchTask = await batch_task_create_service.create_task(
+            batch_task_type=BatchTaskType(create_batch_task_dto.type),
             file=file.file,
-            metadata=create_task_dto.metadata,
+            metadata=create_batch_task_dto.metadata,
         )
 
-        result = [TaskDTO.from_entity(task) for task in tasks]
+        result = BatchTaskDTO.from_entity(batch_task)
         
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
@@ -70,8 +68,8 @@ async def create_task(
         )
         
     except Exception as e:
-        _log.error(f"Error creating task: {str(e)}")
+        _log.error(f"Error creating batch task: {str(e)}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"error": f"Failed to create task: {str(e)}"}
+            content={"error": f"Failed to create batch task: {str(e)}"}
         )

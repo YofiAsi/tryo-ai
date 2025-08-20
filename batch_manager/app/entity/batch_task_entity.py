@@ -9,8 +9,8 @@ from pydantic import Field
 from app.entity.batch_entity import Batch
 
 
-class TaskStatus(str, Enum):
-    """Task lifecycle status values"""
+class BatchTaskStatus(str, Enum):
+    """BatchTask lifecycle status values"""
     CREATED = "created"
     RUNNING = "running"
     PAUSED = "paused"
@@ -19,22 +19,22 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class TaskType(str, Enum):
-    """Task type values"""
+class BatchTaskType(str, Enum):
+    """BatchTask type values"""
     CV_PROCESSING = "cv_processing"
     EMBEDDING = "embedding"
     TOURNAMENT = "tournament"
 
 
-class Task(Document):
-    """Entity representing a task that manages multiple OpenAI batches"""
+class BatchTask(Document):
+    """Entity representing a batch task that manages multiple OpenAI batches"""
     
-    # Unique identifier for this task
-    task_id: uuid.UUID = Field(default_factory=uuid.uuid4)
-    task_type: TaskType
+    # Unique identifier for this batch task
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    task_type: BatchTaskType
     
     # Status and progress
-    status: TaskStatus = Field(default=TaskStatus.CREATED)
+    status: BatchTaskStatus = Field(default=BatchTaskStatus.CREATED)
     
     # Batch management
     batch_ids: List[str] = Field(default_factory=list, description="List of associated batch IDs")
@@ -62,7 +62,7 @@ class Task(Document):
     errors: Optional[List[Dict[str, Any]]] = Field(default=None)
     
     class Settings:
-        name = "tasks"
+        name = "batch_tasks"
         validate_on_save = True
     
     @before_event(Update, Replace)
@@ -71,31 +71,31 @@ class Task(Document):
         self.updated_at = datetime.now(timezone.utc)
     
     def __str__(self) -> str:
-        return f"Task: {self.task_id}, Name: {self.name}, Status: {self.status.value}, Progress: {self.get_progress_percentage():.1f}%"
+        return f"BatchTask: {self.id}, Type: {self.task_type.value}, Status: {self.status.value}, Progress: {self.get_progress_percentage():.1f}%"
     
     @property
     def is_completed(self) -> bool:
-        """Check if the task has completed processing"""
-        return self.status == TaskStatus.COMPLETED
+        """Check if the batch task has completed processing"""
+        return self.status == BatchTaskStatus.COMPLETED
     
     @property
     def is_failed(self) -> bool:
-        """Check if the task has failed"""
-        return self.status == TaskStatus.FAILED
+        """Check if the batch task has failed"""
+        return self.status == BatchTaskStatus.FAILED
     
     @property
     def is_running(self) -> bool:
-        """Check if the task is currently running"""
-        return self.status == TaskStatus.RUNNING
+        """Check if the batch task is currently running"""
+        return self.status == BatchTaskStatus.RUNNING
     
     @property
     def is_terminal_state(self) -> bool:
-        """Check if the task is in a terminal state (no further processing expected)"""
-        return self.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]
+        """Check if the batch task is in a terminal state (no further processing expected)"""
+        return self.status in [BatchTaskStatus.COMPLETED, BatchTaskStatus.FAILED, BatchTaskStatus.CANCELLED]
     
     @property
     def batch_count(self) -> int:
-        """Get the number of batches associated with this task"""
+        """Get the number of batches associated with this batch task"""
         return len(self.batch_ids)
     
     def get_progress_percentage(self) -> float:
@@ -107,7 +107,7 @@ class Task(Document):
         return (processed_requests / self.total_requests) * 100.0
     
     def add_batch(self, batch: Batch) -> None:
-        """Add a batch to this task"""
+        """Add a batch to this batch task"""
         self.batch_ids.append(batch.batch_id)
         self.total_requests += batch.total_requests
         self.completed_requests += batch.completed_requests
@@ -122,21 +122,21 @@ class Task(Document):
         self.failed_requests = failed_requests
     
     def start(self) -> None:
-        """Mark the task as started"""
-        if self.status == TaskStatus.CREATED:
-            self.status = TaskStatus.RUNNING
+        """Mark the batch task as started"""
+        if self.status == BatchTaskStatus.CREATED:
+            self.status = BatchTaskStatus.RUNNING
             self.started_at = datetime.now(timezone.utc)
     
     def complete(self) -> None:
-        """Mark the task as completed"""
+        """Mark the batch task as completed"""
         if not self.is_terminal_state:
-            self.status = TaskStatus.COMPLETED
+            self.status = BatchTaskStatus.COMPLETED
             self.completed_at = datetime.now(timezone.utc)
     
     def fail(self, error: Optional[Dict[str, Any]] = None) -> None:
-        """Mark the task as failed"""
+        """Mark the batch task as failed"""
         if not self.is_terminal_state:
-            self.status = TaskStatus.FAILED
+            self.status = BatchTaskStatus.FAILED
             self.failed_at = datetime.now(timezone.utc)
             if error:
                 if self.errors is None:
@@ -144,17 +144,17 @@ class Task(Document):
                 self.errors.append(error)
     
     def cancel(self) -> None:
-        """Mark the task as cancelled"""
+        """Mark the batch task as cancelled"""
         if not self.is_terminal_state:
-            self.status = TaskStatus.CANCELLED
+            self.status = BatchTaskStatus.CANCELLED
             self.cancelled_at = datetime.now(timezone.utc)
     
     def pause(self) -> None:
-        """Pause the task"""
-        if self.status == TaskStatus.RUNNING:
-            self.status = TaskStatus.PAUSED
+        """Pause the batch task"""
+        if self.status == BatchTaskStatus.RUNNING:
+            self.status = BatchTaskStatus.PAUSED
     
     def resume(self) -> None:
-        """Resume the task from paused state"""
-        if self.status == TaskStatus.PAUSED:
-            self.status = TaskStatus.RUNNING
+        """Resume the batch task from paused state"""
+        if self.status == BatchTaskStatus.PAUSED:
+            self.status = BatchTaskStatus.RUNNING
