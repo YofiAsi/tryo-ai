@@ -304,3 +304,13 @@ export interface ActivityLogSummaryDTO {
   activities_by_user: Record<string, number>
   recent_activities: ActivityLogDTO[]
 }
+
+export interface JobPositionChatRequest {
+  message: string
+  message_history?: string
+}
+
+export interface JobPositionChatResponse {
+  output: string
+  message_history?: string
+}

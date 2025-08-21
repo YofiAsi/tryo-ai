@@ -5,9 +5,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 export class BaseApiClient {
   protected baseUrl: string
   protected token?: string
+  protected timeout: number
 
-  constructor(baseUrl: string = API_BASE_URL) {
+  constructor(baseUrl: string = API_BASE_URL, timeout: number = 30000) {
     this.baseUrl = baseUrl
+    this.timeout = timeout
   }
 
   setToken(token: string) {
@@ -43,25 +45,40 @@ export class BaseApiClient {
       headers.Authorization = `Bearer ${this.token}`
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    })
+    // Create AbortController for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout)
 
-    if (!response.ok) {
-      const error = new Error(`API Error: ${response.status} ${response.statusText}`)
-      // Add status property to error object for better error handling
-      ;(error as any).status = response.status
-      ;(error as any).statusText = response.statusText
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const error = new Error(`API Error: ${response.status} ${response.statusText}`)
+        // Add status property to error object for better error handling
+        ;(error as any).status = response.status
+        ;(error as any).statusText = response.statusText
+        throw error
+      }
+
+      // Handle 204 No Content responses
+      if (response.status === 204) {
+        return {} as T
+      }
+
+      return response.json()
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${this.timeout}ms`)
+      }
       throw error
     }
-
-    // Handle 204 No Content responses
-    if (response.status === 204) {
-      return {} as T
-    }
-
-    return response.json()
   }
 
   protected async requestWithHeaders<T>(
@@ -93,26 +110,41 @@ export class BaseApiClient {
       headers.Authorization = `Bearer ${this.token}`
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    })
+    // Create AbortController for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout)
 
-    if (!response.ok) {
-      const error = new Error(`API Error: ${response.status} ${response.statusText}`)
-      // Add status property to error object for better error handling
-      ;(error as any).status = response.status
-      ;(error as any).statusText = response.statusText
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const error = new Error(`API Error: ${response.status} ${response.statusText}`)
+        // Add status property to error object for better error handling
+        ;(error as any).status = response.status
+        ;(error as any).statusText = response.statusText
+        throw error
+      }
+
+      // Handle 204 No Content responses
+      if (response.status === 204) {
+        return { data: {} as T, headers: response.headers }
+      }
+
+      const data = await response.json()
+      return { data, headers: response.headers }
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${this.timeout}ms`)
+      }
       throw error
     }
-
-    // Handle 204 No Content responses
-    if (response.status === 204) {
-      return { data: {} as T, headers: response.headers }
-    }
-
-    const data = await response.json()
-    return { data, headers: response.headers }
   }
 
   // Health check
