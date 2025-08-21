@@ -1,0 +1,50 @@
+services:
+  tyro-nginx:
+    build:
+      context: ../../tyro-nginx/
+      dockerfile: Dockerfile
+    container_name: tyro-nginx
+    ports:
+      - "8000:80"
+    depends_on:
+      - tyro-backend-api
+      - tyro-frontend
+    networks:
+      - tyro-network
+    restart: unless-stopped
+
+  tyro-backend-api:
+    build:
+      context: ../../tyro-backend-api/
+      dockerfile: Dockerfile.dev
+    container_name: tyro-backend-api
+    volumes:
+      - ../../tyro-backend-api:/app
+    networks:
+      - tyro-network
+    restart: unless-stopped
+    env_file:
+      - ./configs/.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  tyro-frontend:
+    build:
+      context: ../../tyro-frontend/
+      dockerfile: Dockerfile.dev
+    container_name: tyro-frontend
+    volumes:
+      - ../../tyro-frontend:/app
+      - /app/node_modules
+    networks:
+      - tyro-network
+    restart: unless-stopped
+    env_file:
+      - ./configs/.env
+
+networks:
+  tyro-network:
