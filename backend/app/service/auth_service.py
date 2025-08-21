@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from jose import JWTError, jwt
 from starlette.requests import Request
 
-from app.conf.env.oauth_config import oauth2_settings
+from app.conf.app_settings import oauth2_settings
 from app.consts import UserRole
 from app.entity.user_entity import User
 from app.entity.activity_log_entity import ActivityType

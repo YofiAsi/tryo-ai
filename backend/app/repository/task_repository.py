@@ -98,11 +98,9 @@ class TaskRepository:
         _log.debug(f"TaskRepository Tasks retrieved")
         return docs
 
-    # Synchronous methods for Celery workers
     def create_sync(self, task: Task) -> Task:
         _log.debug(f"TaskRepository Creating task synchronously: {task}")
-        # Note: This is a simplified version for Celery workers
-        # In production, you might want to use a different approach
+
         import asyncio
         try:
             loop = asyncio.get_event_loop()

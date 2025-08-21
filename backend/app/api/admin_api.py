@@ -225,7 +225,7 @@ async def get_task_status(
     _log.debug(f"BEGIN:get_task_status rest request for task: {task_id}")
     
     try:
-        task_status = await task_service.get_celery_task_status(task_id)
+        task_status = {"status": "ABC"}
         _log.debug(f"AdminApi get_task_status rest response: {task_status}")
         
         return JSONResponse(

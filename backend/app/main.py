@@ -8,8 +8,10 @@ from fastapi.responses import JSONResponse
 from app.api import api_router
 from app.conf.app_settings import app_settings, server_settings, cors_settings
 from app.conf.env.db_config import init_db
+from app.conf.env.sentry_config import init_sentry, is_sentry_enabled
 from app.errors.business_exception import BusinessException
 from app.migration.user_migration import init_migration
+
 
 _log = logging.getLogger(__name__)
 _log.setLevel(logging.DEBUG)
@@ -17,6 +19,10 @@ _log.setLevel(logging.DEBUG)
 @asynccontextmanager
 async def lifespan(_):
     _log.debug("FastAPI Lifespan started")
+    
+    # Initialize Sentry
+    await init_sentry()
+    
     await init_db()
     await init_migration()
     yield
@@ -46,6 +52,10 @@ tags_metadata = [
     {
         "name": "admin",
         "description": "Administrative operations for managing users, tasks, and system resources."
+    },
+    {
+        "name": "ai-agents",
+        "description": "AI-powered operations including job position analysis, candidate screening, and intelligent insights."
     }
 ]
 app = FastAPI(
@@ -88,6 +98,30 @@ def write_log(request: Request, exc: BusinessException):
 
 @app.exception_handler(BusinessException)
 async def business_exception_handler(request: Request, exc: BusinessException):
+    # Capture business exceptions in Sentry if enabled
+    if is_sentry_enabled():
+        from app.utils.sentry_utils import capture_exception, set_context, set_tag
+        
+        # Set context for better error tracking
+        set_context("request", {
+            "method": request.method,
+            "url": str(request.url),
+            "path": request.url.path,
+            "query_params": dict(request.query_params),
+            "headers": dict(request.headers)
+        })
+        
+        # Set tags for easier filtering
+        set_tag("error_type", "business_exception")
+        set_tag("error_code", exc.code.name)
+        set_tag("http_status", str(status.HTTP_400_BAD_REQUEST))
+        
+        # Capture the exception
+        capture_exception(exc, {
+            "business_error_code": exc.code.name,
+            "business_error_message": exc.msg
+        })
+    
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"detail": {"error_code": f"{status.HTTP_400_BAD_REQUEST}.{exc.code.name}", "error_message": exc.msg}},
@@ -100,3 +134,7 @@ async def business_exception_handler(request: Request, exc: BusinessException):
 @app.get("/api/v1/health")
 async def health():
     return {"status": "UP"}
+
+@app.get("/api/v1/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0

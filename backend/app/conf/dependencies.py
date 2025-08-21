@@ -11,8 +11,10 @@ from app.repository.job_position_repository import JobPositionRepository
 from app.service.job_position_service import JobPositionService
 from app.repository.activity_log_repository import ActivityLogRepository
 from app.service.activity_log_service import ActivityLogService
+from app.service.ai_agents_service import AIAgentsService
 from app.service.auth_service import auth_service
 from app.entity.user_entity import User
+from app.conf.app_settings import openai_settings
 
 security = HTTPBearer()
 
@@ -108,3 +110,11 @@ async def get_current_admin_user(current_user: User = Depends(get_current_user))
             detail="Not enough permissions"
         )
     return current_user
+
+
+async def get_ai_agents_service() -> AIAgentsService:
+    """
+    Dependency to get AI Agents Service
+    Use this for AI agent operations
+    """
+    return AIAgentsService()

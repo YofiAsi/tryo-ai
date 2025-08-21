@@ -10,7 +10,6 @@ from app.entity.task_entity import Task, TaskType, TaskStatus
 from app.errors.business_exception import BusinessException, ErrorCodes
 from app.repository.task_repository import TaskRepository
 from app.schema.tasks_dto import CVProcessingTaskDTO
-from app.workers.cv_processing_worker import process_cv_processing, simple_cv_processing
 
 _log = logging.getLogger(__name__)
 
@@ -81,26 +80,6 @@ class TaskService:
         created_task = await self.repository.create(new_task)
         _log.debug(f"TaskService CV processing task created in database: {created_task.task_id}")
         
-        # Start Celery task
-        try:
-            # Convert UUIDs to strings for Celery
-            candidate_ids_str = [str(cid) for cid in task_data.candidates_ids]
-            
-            # Start the Celery task asynchronously
-            celery_task = process_cv_processing.delay(
-                str(created_task.task_id),
-                candidate_ids_str
-            )
-            
-            _log.info(f"Celery task started for CV processing: {celery_task.id}")
-            _log.info(f"Task {created_task.task_id} queued for processing")
-            
-        except Exception as e:
-            _log.error(f"Failed to start Celery task: {str(e)}")
-            # Update task status to failed
-            created_task.status = TaskStatus.FAILED
-            await self.repository.update(created_task)
-            raise BusinessException(ErrorCodes.INVALID_INPUT, f"Failed to start background task: {str(e)}")
         
         return created_task
 
@@ -130,24 +109,3 @@ class TaskService:
         task = await self.repository.retrieve_by_type(task_type.value)
         _log.debug(f"TaskService Task retrieved by type")
         return task
-
-    async def get_celery_task_status(self, id: uuid.UUID) -> dict:
-        """
-        Get the status of a Celery task
-        """
-        _log.debug(f"TaskService Getting Celery task status for: {id}")
-        
-        # First get the task from our database
-        task = await self.repository.retrieve(id)
-        if not task:
-            raise BusinessException(ErrorCodes.NOT_FOUND, f"Task not found: {id}")
-        
-        # Try to get Celery task info (this would require storing Celery task IDs)
-        # For now, return the database task status
-        return {
-            "id": str(task.id),
-            "status": task.status.value,
-            "progress_percentage": task.progress_percentage,
-            "created_at": task.created_at.isoformat() if task.created_at else None,
-            "updated_at": task.updated_at.isoformat() if task.updated_at else None
-        }

@@ -26,4 +26,3 @@ class OAuth2Settings(BaseSettings):
         extra = "ignore"
 
 
-oauth2_settings = OAuth2Settings()
