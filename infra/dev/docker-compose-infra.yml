@@ -5,8 +5,7 @@ services:
     image: mongodb/mongodb-atlas-local
     container_name: tyro-mongo
     volumes:
-      - mongo-data:/data/db
-      - mongo-data-config:/data/configdb
+      - mongo-data:/data/
     environment:
       - TZ=${TZ:-UTC}
     env_file:
