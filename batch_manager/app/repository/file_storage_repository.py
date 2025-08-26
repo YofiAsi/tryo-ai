@@ -8,14 +8,14 @@ in MinIO object storage, following OpenAI Batch API patterns.
 import logging
 import io
 import uuid
-from typing import Optional, BinaryIO, Union
+from typing import Optional, BinaryIO, Union, Any
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
+from dataclasses import dataclass
 
 from minio import Minio
 from minio.error import S3Error
-from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 
 _log = logging.getLogger(__name__)
@@ -24,12 +24,12 @@ _log = logging.getLogger(__name__)
 class MinIOSettings(BaseSettings):
     """MinIO configuration settings"""
     
-    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT")
-    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY")
-    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY")
+    MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT") or ""
+    MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY") or ""
+    MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY") or ""
     MINIO_SECURE: bool = os.getenv("MINIO_SECURE") == "true"
-    MINIO_BATCH_BUCKET: str = os.getenv("MINIO_BATCH_BUCKET")
-    MINIO_REGION: Optional[str] = os.getenv("MINIO_REGION")
+    MINIO_BATCH_BUCKET: str = os.getenv("MINIO_BATCH_BUCKET") or ""
+    MINIO_REGION: str = os.getenv("MINIO_REGION") or ""
     
     class Config:
         env_prefix = "MINIO_"
@@ -37,8 +37,8 @@ class MinIOSettings(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = True
 
-
-class FileMetadata(BaseModel):
+@dataclass
+class FileMetadata:
     """Metadata for stored files"""
     content_type: str
     size: int
@@ -57,7 +57,7 @@ class FileStorageRepository:
         Args:
             settings: MinIO configuration settings. If None, loads from environment.
         """
-        self.settings = settings or MinIOSettings()
+        self.settings: MinIOSettings = settings or MinIOSettings()
         self._client: Optional[Minio] = None
         self._ensure_bucket_exists()
     
@@ -102,7 +102,7 @@ class FileStorageRepository:
         unique_id = str(uuid.uuid4())[:8]
         return f"{batch_id}/{file_type}/{timestamp}_{unique_id}.{file_extension}"
     
-    async def upload_batch_input_file(
+    def upload_batch_input_file(
         self,
         batch_id: str,
         file_data: Union[bytes, BinaryIO, str],
@@ -182,8 +182,41 @@ class FileStorageRepository:
         except Exception as e:
             _log.error(f"Unexpected error uploading file: {e}")
             raise
-    
-    async def download_batch_output_file(
+
+    def download_batch_input_to_tmp_file(
+        self,
+        object_name: str,
+        tmp_file_path: str
+    ) -> str:
+        """Download a batch input file from MinIO
+        
+        Args:
+            object_name: Object name in MinIO
+            destination_path: Path to save the file
+        Returns:
+            Path to the downloaded file
+            
+        Raises:
+            S3Error: If download fails
+        """
+        try:
+            self.client.fget_object(
+                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                object_name=object_name,
+                file_path=tmp_file_path,
+            )
+            
+            _log.info(f"Downloaded batch input file: {object_name} to {tmp_file_path}")
+            return tmp_file_path
+            
+        except S3Error as e:
+            _log.error(f"Failed to download batch input file: {e}")
+            raise
+        except Exception as e:
+            _log.error(f"Unexpected error downloading file: {e}")
+            raise
+
+    def download_batch_output_file(
         self,
         object_name: str
     ) -> bytes:
@@ -218,7 +251,7 @@ class FileStorageRepository:
             _log.error(f"Unexpected error downloading file: {e}")
             raise
     
-    async def download_batch_error_file(
+    def download_batch_error_file(
         self,
         object_name: str
     ) -> bytes:
@@ -253,7 +286,7 @@ class FileStorageRepository:
             _log.error(f"Unexpected error downloading file: {e}")
             raise
     
-    async def store_batch_results(
+    def store_batch_results(
         self,
         batch_id: str,
         results_data: bytes,
@@ -304,7 +337,7 @@ class FileStorageRepository:
             _log.error(f"Unexpected error storing results: {e}")
             raise
     
-    async def store_batch_errors(
+    def store_batch_errors(
         self,
         batch_id: str,
         error_data: bytes,
@@ -355,7 +388,7 @@ class FileStorageRepository:
             _log.error(f"Unexpected error storing errors: {e}")
             raise
     
-    async def delete_file(self, object_name: str) -> bool:
+    def delete_file(self, object_name: str) -> bool:
         """Delete a file from MinIO
         
         Args:
@@ -380,7 +413,7 @@ class FileStorageRepository:
             _log.error(f"Unexpected error deleting file {object_name}: {e}")
             return False
     
-    async def cleanup_batch_files(self, batch_id: str) -> bool:
+    def cleanup_batch_files(self, batch_id: str) -> bool:
         """Clean up all files associated with a batch
         
         Args:
@@ -400,6 +433,8 @@ class FileStorageRepository:
             
             deleted_count = 0
             for obj in objects:
+                if obj.object_name is None:
+                    continue
                 try:
                     self.client.remove_object(
                         bucket_name=self.settings.MINIO_BATCH_BUCKET,
@@ -419,7 +454,7 @@ class FileStorageRepository:
             _log.error(f"Unexpected error cleaning up batch files for {batch_id}: {e}")
             return False
     
-    async def get_file_info(self, object_name: str) -> Optional[dict]:
+    def get_file_info(self, object_name: str) -> Optional[dict[str, Any]]:
         """Get information about a file in MinIO
         
         Args:
@@ -452,7 +487,7 @@ class FileStorageRepository:
             _log.error(f"Unexpected error getting file info for {object_name}: {e}")
             raise
     
-    async def list_batch_files(self, batch_id: str) -> list[dict]:
+    def list_batch_files(self, batch_id: str) -> list[dict[str, Any]]:
         """List all files associated with a batch
         
         Args:
@@ -509,7 +544,7 @@ class FileStorageRepository:
             url = self.client.presigned_get_object(
                 bucket_name=self.settings.MINIO_BATCH_BUCKET,
                 object_name=object_name,
-                expires=expires_in_seconds
+                expires=timedelta(seconds=expires_in_seconds)
             )
             
             _log.debug(f"Generated presigned URL for {object_name}")

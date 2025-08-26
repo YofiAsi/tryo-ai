@@ -1,11 +1,8 @@
 import json
 import logging
-from typing import List
-import uuid
+from typing import List, Any
 from datetime import datetime
-
 from beanie import PydanticObjectId
-
 from app.conf.page_response import PageResponse
 from app.entity.batch_task_entity import BatchTask, BatchTaskStatus
 from app.errors.business_exception import BusinessException, ErrorCodes
@@ -21,14 +18,14 @@ class BatchTaskRepository:
     BatchTask entity is a beanie document model and all the operations are performed using the beanie library.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         _log.debug("BatchTaskRepository Connecting to database")
 
     async def create(self, batch_task: BatchTask) -> BatchTask:
         _log.debug(f"BatchTaskRepository Creating batch_task: {batch_task.id}")
-        result = await BatchTask.insert(batch_task)
+        await BatchTask.insert(batch_task)
         _log.debug("BatchTaskRepository BatchTask created")
-        return result
+        return batch_task
 
     async def bulk_create(self, batch_tasks: List[BatchTask]) -> List[BatchTask]:
         """
@@ -51,22 +48,22 @@ class BatchTaskRepository:
         
         try:
             # Use Beanie's insert_many for bulk insertion
-            result = await BatchTask.insert_many(batch_tasks)
-            _log.info(f"BatchTaskRepository Successfully created {len(result)} batch_tasks")
-            return result
+            await BatchTask.insert_many(batch_tasks)
+            _log.info(f"BatchTaskRepository Successfully created {len(batch_tasks)} batch_tasks")
+            return batch_tasks
         except Exception as e:
             _log.error(f"BatchTaskRepository Failed to bulk create batch_tasks: {str(e)}")
-            raise BusinessException(ErrorCodes.INTERNAL_ERROR, f"Failed to create batch_tasks: {str(e)}")
+            raise BusinessException(ErrorCodes.INTERNAL_SERVER_ERROR, f"Failed to create batch_tasks: {str(e)}")
 
     async def update(self, batch_task: BatchTask) -> BatchTask:
         _log.debug(f"BatchTaskRepository Updating batch_task: {batch_task.id}")
         if batch_task.id is None:
             raise BusinessException(ErrorCodes.INVALID_PAYLOAD, "BatchTask id is required for update")
-        result = await batch_task.replace()
+        await batch_task.replace()
         _log.debug("BatchTaskRepository BatchTask updated")
-        return result
+        return batch_task
 
-    async def delete(self, id: PydanticObjectId):
+    async def delete(self, id: str) -> None:
         _log.debug(f"BatchTaskRepository Deleting batch_task: {id}")
         result = await BatchTask.find_one({"_id": id})
         if not result:
@@ -75,49 +72,49 @@ class BatchTaskRepository:
         await result.delete()
         _log.debug("BatchTaskRepository BatchTask deleted")
 
-    async def find(self, query: str | None = None, page: int = 1, size: int = 10, sort: str = "-created_at") -> PageResponse:
+    async def find(self, query: str | None = None, page: int = 1, size: int = 10, sort: str = "-created_at") -> PageResponse[BatchTask]:
         _log.debug("BatchTaskRepository list request")
         if query is None:
-            query = {}
+            query_dict = {}
         else:
-            query = json.loads(query)
+            query_dict = json.loads(query)
 
         if page < 1:
             raise BusinessException(ErrorCodes.INVALID_INPUT, "Invalid page idx")
 
-        total_count = await BatchTask.find(query).count()
+        total_count = await BatchTask.find(query_dict).count()
         if total_count == 0:
             return PageResponse(content=[], page=page, size=size, total=total_count)
 
-        document = BatchTask.find(query).skip((page-1) * size).limit(size).sort(sort)
+        document = BatchTask.find(query_dict).skip((page-1) * size).limit(size).sort(sort)
         content = await document.to_list()
         _log.debug("BatchTaskRepository Tasks retrieved")
         return PageResponse(content=content, page=page, size=size, total=total_count)
 
-    async def count(self, query: dict) -> int:
-        _log.debug(f"BatchTaskRepository Counting batch_tasks with query: {query}")
-        doc = BatchTask.find(query)
+    async def count(self, query_dict: dict[str, Any]) -> int:
+        _log.debug(f"BatchTaskRepository Counting batch_tasks with query: {query_dict}")
+        doc = BatchTask.find(query_dict)
         result = await doc.count()
         _log.debug("BatchTaskRepository Tasks counted")
         return result
 
-    async def retrieve(self, id: PydanticObjectId) -> BatchTask:
+    async def retrieve(self, id: str) -> BatchTask:
         _log.debug(f"BatchTaskRepository Retrieving batch_task: {id}")
-        doc = await BatchTask.find_one({"_id": id})
-        if not doc:
+        batch_task = await BatchTask.find_one({"_id": id})
+        if not batch_task:
             raise BusinessException(ErrorCodes.NOT_FOUND, f"BatchTask not found: {id}")
         _log.debug("BatchTaskRepository BatchTask retrieved")
-        return doc
+        return batch_task
 
-    async def retrieve_by_task_id(self, id: uuid.UUID) -> BatchTask:
+    async def retrieve_by_task_id(self, id: PydanticObjectId) -> BatchTask:
         _log.debug(f"BatchTaskRepository Retrieving batch_task by id: {id}")
-        doc = await BatchTask.find_one({"id": id})
-        if not doc:
+        batch_task = await BatchTask.find_one({"id": id})
+        if not batch_task:
             raise BusinessException(ErrorCodes.NOT_FOUND, f"BatchTask not found: {id}")
         _log.debug("BatchTaskRepository BatchTask retrieved")
-        return doc
+        return batch_task
 
-    async def find_by_status(self, status: BatchTaskStatus, page: int = 1, size: int = 10) -> PageResponse:
+    async def find_by_status(self, status: BatchTaskStatus, page: int = 1, size: int = 10) -> PageResponse[BatchTask]:
         _log.debug(f"BatchTaskRepository Finding batch_tasks by status: {status}")
         query = {"status": status.value}
         
@@ -133,7 +130,7 @@ class BatchTaskRepository:
         _log.debug("BatchTaskRepository Tasks found by status")
         return PageResponse(content=content, page=page, size=size, total=total_count)
 
-    async def find_by_api_key_id(self, api_key_id: str, page: int = 1, size: int = 10) -> PageResponse:
+    async def find_by_api_key_id(self, api_key_id: str, page: int = 1, size: int = 10) -> PageResponse[BatchTask]:
         _log.debug(f"BatchTaskRepository Finding batch_tasks by api_key_id: {api_key_id}")
         query = {"api_key_id": api_key_id}
         
@@ -149,7 +146,7 @@ class BatchTaskRepository:
         _log.debug("BatchTaskRepository Tasks found by api_key_id")
         return PageResponse(content=content, page=page, size=size, total=total_count)
 
-    async def find_running_tasks(self, page: int = 1, size: int = 10) -> PageResponse:
+    async def find_running_tasks(self, page: int = 1, size: int = 10) -> PageResponse[BatchTask]:
         _log.debug("BatchTaskRepository Finding running batch_tasks")
         query = {"status": BatchTaskStatus.RUNNING.value}
         
@@ -172,7 +169,7 @@ class BatchTaskRepository:
         _log.debug("BatchTaskRepository Tasks counted by status")
         return result
 
-    async def find_tasks_created_after(self, after_date: datetime, page: int = 1, size: int = 10) -> PageResponse:
+    async def find_tasks_created_after(self, after_date: datetime, page: int = 1, size: int = 10) -> PageResponse[BatchTask]:
         _log.debug(f"BatchTaskRepository Finding batch_tasks created after: {after_date}")
         query = {"created_at": {"$gte": after_date}}
         
