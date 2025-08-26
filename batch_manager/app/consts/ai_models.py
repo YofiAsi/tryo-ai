@@ -2,7 +2,7 @@ from enum import Enum
 
 class EnumHasValue(Enum):
     @classmethod
-    def has_value(cls, value):
+    def has_value(cls, value: str) -> bool:
         return value in cls._value2member_map_ 
 
 class AIModel(str, EnumHasValue):
