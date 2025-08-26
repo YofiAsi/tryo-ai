@@ -1,30 +1,29 @@
-from datetime import datetime
-from typing import Optional, Dict, Any, List
+from __future__ import annotations
+from typing import TYPE_CHECKING, Optional, Dict, Any, List
 from pydantic import BaseModel, Field
-import uuid
 
 from app.entity.batch_task_entity import BatchTaskStatus, BatchTaskType, BatchTask
-from app.consts.ai_models import AIModel
+from datetime import datetime
 
 
 class CreateBatchTaskDTO(BaseModel):
     """Request model for creating a new batch task"""
+
     type: str
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
 
 
 class BatchTaskDTO(BaseModel):
     """Response model for batch task information"""
-    
-    id: uuid.UUID
+
+    id: str
     batch_ids: List[str]
-    
+
     total_requests: int
-    
     completed_requests: int
     failed_requests: int
     progress_percentage: float
-    
+
     # Timestamps
     created_at: datetime
     updated_at: datetime
@@ -32,18 +31,18 @@ class BatchTaskDTO(BaseModel):
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
-    
+
     # Error information
     errors: Optional[List[Dict[str, Any]]] = None
-    
+
     # Metadata
     metadata: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_entity(cls, batch_task: BatchTask) -> "BatchTaskDTO":
         return cls(
-            id=batch_task.id,
-            batch_ids=batch_task.batch_ids,
+            id=str(batch_task.id),
+            batch_ids=[str(batch_id) for batch_id in batch_task.batch_ids],
             total_requests=batch_task.total_requests,
             completed_requests=batch_task.completed_requests,
             failed_requests=batch_task.failed_requests,
@@ -61,20 +60,22 @@ class BatchTaskDTO(BaseModel):
 
 class BatchTaskStatusDTO(BaseModel):
     """Response model for batch task status information"""
-    
-    id: uuid.UUID
+
+    id: str
     task_type: BatchTaskType
     status: BatchTaskStatus
     progress_percentage: float
-    
+
     # Progress details
     total_requests: int
     completed_requests: int
     failed_requests: int
     batch_count: int
-    
+
     created_at: datetime
     updated_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
+
+
