@@ -1,9 +1,13 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, Dict, Any, List
+
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
-from datetime import datetime
-from app.entity.batch_entity import BatchStatus, Batch
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from app.entity.batch_entity import Batch, BatchStatus
 
 
 class BatchDTO(BaseModel):

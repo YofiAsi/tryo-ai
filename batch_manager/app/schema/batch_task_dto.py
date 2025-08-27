@@ -1,9 +1,13 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, Dict, Any, List
+
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
-from app.entity.batch_task_entity import BatchTaskStatus, BatchTaskType, BatchTask
-from datetime import datetime
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from app.entity.batch_task_entity import BatchTask, BatchTaskStatus, BatchTaskType
 
 
 class CreateBatchTaskDTO(BaseModel):
@@ -39,7 +43,7 @@ class BatchTaskDTO(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
     @classmethod
-    def from_entity(cls, batch_task: BatchTask) -> "BatchTaskDTO":
+    def from_entity(cls, batch_task: BatchTask) -> BatchTaskDTO:
         return cls(
             id=str(batch_task.id),
             batch_ids=[str(batch_id) for batch_id in batch_task.batch_ids],

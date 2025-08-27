@@ -1,37 +1,40 @@
 from __future__ import annotations
-import logging
-import tiktoken
+
 import asyncio
-import tempfile
-import shutil
 import json
+import logging
+import shutil
+import tempfile
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
-    TextIO,
-    Optional,
-    Iterator,
-    Union,
-    List,
-    Dict,
     Any,
-    Tuple,
     BinaryIO,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    TextIO,
+    Tuple,
+    Union,
 )
+
+import tiktoken
+
 from app.consts.ai_models import AIModel
-from app.entity.batch_entity import Batch
 from app.consts.rate_limits import (
+    MAX_BATCH_INPUT_FILE_SIZE_BYTES,
     MAX_REQUESTS_PER_BATCH,
     MODEL_MAX_BATCH_QUEUE_LIMIT_PER_PROJECT_TPD,
-    MAX_BATCH_INPUT_FILE_SIZE_BYTES,
 )
+from app.entity.batch_entity import Batch
+from app.entity.batch_task_entity import BatchTask, BatchTaskType
 from app.errors.business_exception import BusinessException, ErrorCodes
-from app.entity.batch_task_entity import BatchTask
 
-from app.entity.batch_task_entity import BatchTaskType
-from app.repository.batch_task_repository import BatchTaskRepository
-from app.repository.batch_repository import BatchRepository
-from app.repository.file_storage_repository import FileStorageRepository, FileMetadata
+if TYPE_CHECKING:
+    from app.repository.batch_repository import BatchRepository
+    from app.repository.batch_task_repository import BatchTaskRepository
+    from app.repository.file_storage_repository import FileMetadata, FileStorageRepository
 
 _log = logging.getLogger(__name__)
 ENCODER = tiktoken.get_encoding("cl100k_base")

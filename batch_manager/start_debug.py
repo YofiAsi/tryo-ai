@@ -3,14 +3,17 @@
 Debug startup script for the Tyro Batch Manager service.
 This script enables remote debugging with debugpy.
 """
+import logging
 import os
 import sys
-import logging
 import traceback
+from typing import TYPE_CHECKING, Type
+
 import uvicorn
 from dotenv import load_dotenv
-from typing import Type
-from types import TracebackType
+
+if TYPE_CHECKING:
+    from types import TracebackType
 
 if __name__ == "__main__":
     # Load environment variables from .env file
@@ -20,7 +23,7 @@ if __name__ == "__main__":
     debug_mode = os.getenv("DEBUG_MODE", "false").lower() == "true"
     
     if debug_mode:
-        import debugpy # type: ignore
+        import debugpy  # type: ignore
         # Start debugpy server
         debugpy.listen(("0.0.0.0", 5678))
         print("🐛 Debug server started on port 5678")
@@ -54,7 +57,7 @@ if __name__ == "__main__":
     )
     
     # Enable exception logging
-    def handle_exception(exc_type: Type[BaseException], exc_value: BaseException, exc_traceback: TracebackType | None) -> None:
+    def handle_exception(exc_type: Type[BaseException], exc_value: BaseException, exc_traceback: "TracebackType | None") -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return

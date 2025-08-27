@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import List, Tuple, Generator, Optional
+from typing import TYPE_CHECKING, Generator, Optional
+
 from openai import OpenAI
-from app.entity.openai_client_entity import OpenAiClient
+
+if TYPE_CHECKING:
+    from app.entity.openai_client_entity import OpenAiClient
 
 @dataclass
 class OpenAiClientContext:

@@ -1,4 +1,5 @@
 import logging
+
 from app.entity.batch_entity import Batch
 from app.entity.batch_task_entity import BatchTask
 

@@ -1,17 +1,23 @@
+"""Manager API endpoints for batch task operations."""
+
 from __future__ import annotations
-import logging
-from typing import TYPE_CHECKING
+
 import json
-from fastapi import APIRouter, Depends, status, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+import logging
+from typing import TYPE_CHECKING, Annotated
+
 from beanie import PydanticObjectId
-from app.schema.batch_task_dto import CreateBatchTaskDTO, BatchTaskDTO
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi.responses import JSONResponse
+
 from app.conf.dependencies import get_batch_task_create_service, get_batch_task_service
-from app.entity.batch_task_entity import BatchTaskType, BatchTask
+from app.entity.batch_task_entity import BatchTask, BatchTaskType
+from app.schema.batch_task_dto import BatchTaskDTO, CreateBatchTaskDTO
 
+if TYPE_CHECKING:
+    from app.service.batch_task_create_service import BatchTaskCreateService
+    from app.service.batch_task_service import BatchTaskService
 
-from app.service.batch_task_create_service import BatchTaskCreateService
-from app.service.batch_task_service import BatchTaskService
 
 _resource = "manager"
 _path = f"/api/v1/{_resource}"
@@ -30,17 +36,16 @@ router = APIRouter(prefix=_path, tags=[_resource])
     status_code=status.HTTP_201_CREATED,
 )
 async def create_batch_task(
-    dto_json: str = Form(...),
-    file: UploadFile = File(...),
-    batch_task_create_service: BatchTaskCreateService = Depends(get_batch_task_create_service),
+    dto_form: Annotated[str, Form()],
+    file: Annotated[UploadFile, File()],
+    batch_task_create_service: Annotated[BatchTaskCreateService, Depends(get_batch_task_create_service)],
 ) -> JSONResponse:
-    """
-    Create a new batch task for OpenAI batch processing.
+    """Create a new batch task for OpenAI batch processing.
 
     This endpoint creates a batch task that can manage multiple OpenAI batches
     for processing requests through the OpenAI Batch API.
     """
-    create_batch_task_dto = CreateBatchTaskDTO(**json.loads(dto_json))
+    create_batch_task_dto = CreateBatchTaskDTO(**json.loads(dto_form))
 
     _log.info(f"Creating batch task with type: {create_batch_task_dto.type}")
 
@@ -50,9 +55,7 @@ async def create_batch_task(
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"error": "File is required"})
 
         if not file.filename.endswith(".jsonl"):
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST, content={"error": "File must be in JSONL format"}
-            )
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"error": "File must be in JSONL format"})
 
         # Create batch task using the service
         batch_task: BatchTask = await batch_task_create_service.create_task(
@@ -65,11 +68,11 @@ async def create_batch_task(
 
         return JSONResponse(status_code=status.HTTP_201_CREATED, content=result.model_dump(mode="json"))
 
-    except Exception as e:
-        _log.error(f"Error creating batch task: {str(e)}")
+    except (ValueError, TypeError, KeyError) as e:
+        _log.error(f"Error creating batch task: {e!s}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"error": f"Failed to create batch task: {str(e)}"},
+            content={"error": f"Failed to create batch task: {e!s}"},
         )
 
 
@@ -84,7 +87,7 @@ async def create_batch_task(
 )
 async def get_batch_task(
     task_id: str,
-    batch_task_service: BatchTaskService = Depends(get_batch_task_service),
+    batch_task_service: Annotated[BatchTaskService, Depends(get_batch_task_service)],
 ) -> JSONResponse:
     """Get a batch task by its ID."""
     try:
@@ -98,9 +101,11 @@ async def get_batch_task(
 
     except ValueError:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"error": "Invalid task ID format"})
-    except Exception as e:
-        _log.error(f"Error retrieving batch task: {str(e)}")
+    except (TypeError, KeyError) as e:
+        _log.error(f"Error retrieving batch task: {e!s}")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"error": f"Failed to retrieve batch task: {str(e)}"},
+            content={"error": f"Failed to retrieve batch task: {e!s}"},
         )
+
+

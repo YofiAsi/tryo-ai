@@ -1,11 +1,17 @@
+from __future__ import annotations
+
 import json
 import logging
-from typing import Optional, List, Any
-from datetime import datetime
-from beanie import PydanticObjectId
+from typing import TYPE_CHECKING, Any, List, Optional
+
 from app.conf.page_response import PageResponse
 from app.entity.batch_entity import Batch, BatchStatus
 from app.errors.business_exception import BusinessException, ErrorCodes
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from beanie import PydanticObjectId
 
 _log = logging.getLogger(__name__)
 

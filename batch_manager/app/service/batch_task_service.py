@@ -1,16 +1,22 @@
 """
 BatchTaskService for managing batch processing tasks.
 """
+from __future__ import annotations
+
 import logging
-from typing import Dict, Any, Optional, List
-from beanie import PydanticObjectId
-from app.entity.batch_task_entity import BatchTask, BatchTaskStatus
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from app.entity.batch_entity import Batch, BatchStatus
-from openai.types.batch_request_counts import BatchRequestCounts as BatchRequestCountsDTO
-from app.service.batch_service import BatchService, DownloadBatchFilesResponse
-from app.repository.batch_task_repository import BatchTaskRepository
-from app.repository.batch_repository import BatchRepository
+from app.entity.batch_task_entity import BatchTask, BatchTaskStatus
 from app.errors.business_exception import BusinessException, ErrorCodes
+
+if TYPE_CHECKING:
+    from beanie import PydanticObjectId
+    from openai.types.batch_request_counts import BatchRequestCounts as BatchRequestCountsDTO
+    
+    from app.repository.batch_repository import BatchRepository
+    from app.repository.batch_task_repository import BatchTaskRepository
+    from app.service.batch_service import BatchService, DownloadBatchFilesResponse
 
 _log = logging.getLogger(__name__)
 

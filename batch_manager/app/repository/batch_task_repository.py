@@ -1,11 +1,15 @@
 import json
 import logging
-from typing import List, Any
-from datetime import datetime
-from beanie import PydanticObjectId
+from typing import TYPE_CHECKING, Any, List
+
 from app.conf.page_response import PageResponse
 from app.entity.batch_task_entity import BatchTask, BatchTaskStatus
 from app.errors.business_exception import BusinessException, ErrorCodes
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from beanie import PydanticObjectId
 
 _log = logging.getLogger(__name__)
 
@@ -106,7 +110,7 @@ class BatchTaskRepository:
         _log.debug("BatchTaskRepository BatchTask retrieved")
         return batch_task
 
-    async def retrieve_by_task_id(self, id: PydanticObjectId) -> BatchTask:
+    async def retrieve_by_task_id(self, id: "PydanticObjectId") -> BatchTask:
         _log.debug(f"BatchTaskRepository Retrieving batch_task by id: {id}")
         batch_task = await BatchTask.find_one({"id": id})
         if not batch_task:
@@ -169,7 +173,7 @@ class BatchTaskRepository:
         _log.debug("BatchTaskRepository Tasks counted by status")
         return result
 
-    async def find_tasks_created_after(self, after_date: datetime, page: int = 1, size: int = 10) -> PageResponse[BatchTask]:
+    async def find_tasks_created_after(self, after_date: "datetime", page: int = 1, size: int = 10) -> PageResponse[BatchTask]:
         _log.debug(f"BatchTaskRepository Finding batch_tasks created after: {after_date}")
         query = {"created_at": {"$gte": after_date}}
         

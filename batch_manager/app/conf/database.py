@@ -1,13 +1,12 @@
 # Database Configuration
 import logging
 
-from beanie import init_beanie
-from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic_settings import BaseSettings
-
 from app.entity.batch_entity import Batch
 from app.entity.batch_task_entity import BatchTask
 from app.entity.openai_client_entity import OpenAiClient
+from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic_settings import BaseSettings
 
 log = logging.getLogger(__name__)
 client = None

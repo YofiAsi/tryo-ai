@@ -1,13 +1,15 @@
+from __future__ import annotations
 
 import logging
-from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from beanie import PydanticObjectId
-
-from app.entity.openai_client_entity import OpenAiClient, OpenAiClientStatus
 from app.consts.ai_models import AIModel
+from app.entity.openai_client_entity import OpenAiClient, OpenAiClientStatus
 from app.errors.business_exception import BusinessException, ErrorCodes
+
+if TYPE_CHECKING:
+    from beanie import PydanticObjectId
 
 _log = logging.getLogger(__name__)
 

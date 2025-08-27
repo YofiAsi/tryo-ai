@@ -1,11 +1,14 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Optional, Any
-from dataclasses import dataclass
-from beanie import Document, before_event, Update, Replace
+from typing import Any, Dict, Optional
+
+from beanie import Document, Replace, Update, before_event
 from pydantic import Field
+
 from app.consts.ai_models import AIModel
 from app.consts.rate_limits import MODEL_MAX_BATCH_QUEUE_LIMIT_PER_PROJECT_TPD
+
 
 @dataclass
 class ClientResponse:

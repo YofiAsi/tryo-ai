@@ -6,6 +6,7 @@ These limits are separate from standard per-model rate limits.
 """
 
 from typing import Dict
+
 from app.consts.ai_models import AIModel
 
 MAX_REQUESTS_PER_BATCH = 50_000

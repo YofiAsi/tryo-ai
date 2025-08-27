@@ -1,16 +1,26 @@
-import threading
-import random
-import time
-from typing import Dict, Callable, Optional, Generator, TypeVar, Generic, List
-from openai import OpenAI
-from app.infrastructure.openai_sdk_wrapper import OpenAiSdkClient, OpenAiClientContext
+"""
+MultiKeyOpenAiClientService for managing multiple OpenAI clients with different API keys.
+"""
+
+from __future__ import annotations
+
 import os
-from app.repository.openai_client_repository import OpenAiClientRepository
-from app.entity.openai_client_entity import OpenAiClient
-from datetime import datetime, timezone
+import random
+import threading
+import time
 from contextlib import contextmanager
-from app.consts.ai_models import AIModel
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Callable, Dict, Generator, Generic, List, Optional, TypeVar
+
+from app.entity.openai_client_entity import OpenAiClient
+from app.infrastructure.openai_sdk_wrapper import OpenAiClientContext, OpenAiSdkClient
+
+if TYPE_CHECKING:
+    from openai import OpenAI
+
+    from app.consts.ai_models import AIModel
+    from app.repository.openai_client_repository import OpenAiClientRepository
 
 T = TypeVar("T")
 

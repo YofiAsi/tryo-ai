@@ -1,12 +1,16 @@
 from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional, Dict, Any, Literal, List
 from enum import Enum
-from beanie import Document, Update, Replace, before_event, PydanticObjectId
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+
+from beanie import Document, PydanticObjectId, Replace, Update, before_event
 from pydantic import Field
 
-from app.consts.ai_models import AIModel
-from openai.types.batch import Batch as OpenAiBatchDTO
+if TYPE_CHECKING:
+    from openai.types.batch import Batch as OpenAiBatchDTO
+    
+    from app.consts.ai_models import AIModel
 
 
 class BatchStatus(str, Enum):

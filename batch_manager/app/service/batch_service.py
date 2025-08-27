@@ -1,16 +1,24 @@
-from typing import Callable, Optional, Literal
+"""Service for managing OpenAI batch operations."""
+from __future__ import annotations
+
+import os
+import tempfile
+from dataclasses import dataclass
 from datetime import datetime
+from typing import TYPE_CHECKING, Callable, Literal, Optional
+
+from openai.types.batch_request_counts import BatchRequestCounts as BatchRequestCountsDTO
+
 from app.entity.batch_entity import Batch, BatchStatus
 from app.service.openai_api_service import BatchOperationResponse
-from openai.types.batch import Batch as OpenAiBatchDTO
-from openai.types.batch_request_counts import BatchRequestCounts as BatchRequestCountsDTO
-from openai import OpenAI
-from app.service.multi_key_openai_service import MultiKeyOpenAiClientServiceResponse, MultiKeyOpenAiClientService
-from app.repository.batch_repository import BatchRepository
-from app.repository.file_storage_repository import FileStorageRepository
-import tempfile
-import os
-from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from openai import OpenAI
+    from openai.types.batch import Batch as OpenAiBatchDTO
+
+    from app.repository.batch_repository import BatchRepository
+    from app.repository.file_storage_repository import FileStorageRepository
+    from app.service.multi_key_openai_service import MultiKeyOpenAiClientService, MultiKeyOpenAiClientServiceResponse
 
 BATCH_FILE_EXPIRATION_TIME = 864000 # 10 days
 BATCH_COMPLETION_WINDOW: Literal["24h"] = "24h"
@@ -25,7 +33,7 @@ class BatchService:
         self, 
         multi_key_openai_client_service: MultiKeyOpenAiClientService,
         batch_file_storage_repository: FileStorageRepository,
-        batch_repository: BatchRepository
+        batch_repository: BatchRepository,
     ):
         self.multi_key_openai_client_service = multi_key_openai_client_service
         self.batch_file_storage_repository = batch_file_storage_repository
@@ -59,7 +67,11 @@ class BatchService:
 
         return batch_operation
     
-    async def _update_batch_after_batch_operation(self, batch: Batch, client_response: MultiKeyOpenAiClientServiceResponse[BatchOperationResponse]) -> Batch:
+    async def _update_batch_after_batch_operation(
+        self,
+        batch: Batch,
+        client_response: MultiKeyOpenAiClientServiceResponse[BatchOperationResponse],
+    ) -> Batch:
         batch_operation_response: BatchOperationResponse = client_response.response
         client_name: str = client_response.client_name
         batch.openai_batch_id = batch_operation_response.batch_operation_response.id
@@ -78,7 +90,11 @@ class BatchService:
         try:
             self.batch_file_storage_repository.download_batch_input_to_tmp_file(batch.db_input_file_name, temp_file_path)
             batch_operation = self._get_batch_operation(batch, temp_file_path)
-            client_response: MultiKeyOpenAiClientServiceResponse[BatchOperationResponse] = await self.multi_key_openai_client_service.execute(batch.estimated_tokens, batch.ai_model, batch_operation)
+            client_response: MultiKeyOpenAiClientServiceResponse[BatchOperationResponse] = (
+                await self.multi_key_openai_client_service.execute(
+                    batch.estimated_tokens, batch.ai_model, batch_operation
+                )
+            )
             batch = await self._update_batch_after_batch_operation(batch, client_response)
             
             return batch
@@ -110,9 +126,11 @@ class BatchService:
             raise ValueError(f"Batch {batch.id} has no OpenAI batch ID")
         
         try:
-            batch_response: MultiKeyOpenAiClientServiceResponse[OpenAiBatchDTO] = self.multi_key_openai_client_service.execute_with_client_name_no_tokens(
-                batch.api_client_name, 
-                self._get_batch_retrieve_operation(batch)
+            batch_response: MultiKeyOpenAiClientServiceResponse[OpenAiBatchDTO] = (
+                self.multi_key_openai_client_service.execute_with_client_name_no_tokens(
+                    batch.api_client_name, 
+                    self._get_batch_retrieve_operation(batch)
+                )
             )
             return batch_response.response
         except Exception as e:

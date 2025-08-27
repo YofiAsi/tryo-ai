@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional, List, Dict, Any
 from enum import Enum
-from beanie import Document, Update, Replace, before_event, PydanticObjectId
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+from beanie import Document, PydanticObjectId, Replace, Update, before_event
 from pydantic import Field
 
-from app.entity.batch_entity import Batch
+if TYPE_CHECKING:
+    from app.entity.batch_entity import Batch
 
 
 class BatchTaskStatus(str, Enum):
@@ -84,10 +87,7 @@ class BatchTask(Document):
         self.updated_at = datetime.now(timezone.utc)
 
     def __str__(self) -> str:
-        return (
-            f"BatchTask: {self.id}, Type: {self.task_type.value}, "
-            f"Status: {self.status.value}, Progress: {self.get_progress_percentage():.1f}%"
-        )
+        return f"BatchTask: {self.id}, Type: {self.task_type.value}, Status: {self.status.value}, Progress: {self.get_progress_percentage():.1f}%"
 
     @property
     def is_completed(self) -> bool:
@@ -177,4 +177,3 @@ class BatchTask(Document):
         """Resume the batch task from paused state"""
         if self.status == BatchTaskStatus.PAUSED:
             self.status = BatchTaskStatus.RUNNING
-

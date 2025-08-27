@@ -1,18 +1,18 @@
 """
 Dependency injection configuration for FastAPI
 """
+import asyncio
 import logging
 from functools import lru_cache
-import asyncio
 
-from app.service.batch_task_create_service import BatchTaskCreateService
-from app.service.batch_task_service import BatchTaskService
-from app.service.multi_key_openai_service import MultiKeyOpenAiClientService
-from app.service.batch_service import BatchService
 from app.repository.batch_repository import BatchRepository
 from app.repository.batch_task_repository import BatchTaskRepository
 from app.repository.file_storage_repository import FileStorageRepository
 from app.repository.openai_client_repository import OpenAiClientRepository
+from app.service.batch_service import BatchService
+from app.service.batch_task_create_service import BatchTaskCreateService
+from app.service.batch_task_service import BatchTaskService
+from app.service.multi_key_openai_service import MultiKeyOpenAiClientService
 
 _log = logging.getLogger(__name__)
 

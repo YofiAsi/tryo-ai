@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class EnumHasValue(Enum):
     @classmethod
     def has_value(cls, value: str) -> bool:

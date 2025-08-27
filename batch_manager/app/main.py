@@ -20,7 +20,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     
     # Initialize database connection
     try:
-        from app.conf.database import init_db, close_db_connection
+        from app.conf.database import close_db_connection, init_db
         await init_db()
         _log.info("Database initialized successfully")
     except Exception as e:
