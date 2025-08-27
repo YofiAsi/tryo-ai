@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 from beanie import Document, PydanticObjectId, Replace, Update, before_event
 from pydantic import Field
 
+from app.consts.ai_models import AIModel
+
 if TYPE_CHECKING:
     from openai.types.batch import Batch as OpenAiBatchDTO
     
-    from app.consts.ai_models import AIModel
-
 
 class BatchStatus(str, Enum):
     """OpenAI Batch API status values"""
@@ -154,3 +154,4 @@ class Batch(Document):
 
         self.metadata = batch_dto.metadata
 
+Batch.model_rebuild()

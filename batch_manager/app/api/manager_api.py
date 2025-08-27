@@ -38,7 +38,7 @@ router = APIRouter(prefix=_path, tags=[_resource])
 async def create_batch_task(
     dto_form: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
-    batch_task_create_service: Annotated[BatchTaskCreateService, Depends(get_batch_task_create_service)],
+    batch_task_create_service: BatchTaskCreateService = Depends(get_batch_task_create_service),
 ) -> JSONResponse:
     """Create a new batch task for OpenAI batch processing.
 

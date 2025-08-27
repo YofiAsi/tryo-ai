@@ -177,3 +177,5 @@ class BatchTask(Document):
         """Resume the batch task from paused state"""
         if self.status == BatchTaskStatus.PAUSED:
             self.status = BatchTaskStatus.RUNNING
+
+BatchTask.model_rebuild()
