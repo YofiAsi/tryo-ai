@@ -314,3 +314,7 @@ export interface JobPositionChatResponse {
   output: string
   message_history?: string
 }
+
+export interface JobPositionAnalyzeRequest {
+  message_history: string
+}

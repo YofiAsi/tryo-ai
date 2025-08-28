@@ -1,15 +1,15 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom"
 import { SidebarProvider } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
-import { PositionsPage } from "@/components/positions-page"
-import { PositionDetailsPage } from "@/components/position-page"
-import { AddPositionPage } from "@/components/search-page"
+import { AppSidebar } from "@/components/layout/sidebar"
+import { PositionsPage } from "@/pages/positions"
+import { PositionDetailsPage } from "@/pages/position-details"
+import { AddPositionPage } from "@/pages/add-position"
 import { AdminOverviewPage } from "@/components/admin/overview-page"
 import { UserManagementPage } from "@/components/admin/user-management-page"
 import { ActivityMonitorPage } from "@/components/admin/activity-monitor-page"
-import { LoginPage } from "@/components/login-page"
-import { ProtectedRoute } from "@/components/protected-route"
-import { AdminRoute } from "@/components/admin-route"
+import { LoginPage } from "@/pages/login"
+import { ProtectedRoute } from "@/routes/protected-route"
+import { AdminRoute } from "@/routes/admin-route"
 import { AuthProvider } from "@/contexts/auth-context"
 
 export default function App() {
@@ -24,11 +24,11 @@ export default function App() {
                 <ProtectedRoute>
                   <SidebarProvider>
                     <AppSidebar />
-                    <main className="flex-1 overflow-hidden">
+                    <main className="flex-1">
                       <Routes>
                         <Route path="/" element={<PositionsPage />} />
                         <Route path="/positions/:id" element={<PositionDetailsPage />} />
-                        <Route path="/add-position" element={<AddPositionPage />} />
+                        <Route path="/positions/add" element={<AddPositionPage />} />
                         <Route path="/admin/overview" element={<AdminRoute><AdminOverviewPage /></AdminRoute>} />
                         <Route path="/admin/users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
                         <Route path="/admin/activity" element={<AdminRoute><ActivityMonitorPage /></AdminRoute>} />

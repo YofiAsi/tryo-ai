@@ -24,7 +24,7 @@ const menuItems = [
   {
     title: "Add Position",
     icon: Plus,
-    path: "/add-position",
+    path: "/positions/add",
   },
 ]
 

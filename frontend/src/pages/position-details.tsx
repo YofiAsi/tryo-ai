@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { MatchedCandidatesTable } from "./matched-candidates-table"
+import { MatchedCandidatesTable } from "@/components/matched-candidates-table"
 import { getMatchedCandidates } from "@/lib/candidate-matching"
 import { useJobPosition } from "@/hooks/use-swr-hooks"
 
