@@ -61,7 +61,7 @@ class BatchDTO(BaseModel):
             id=str(batch.id),
             client_name=batch.api_client_name or "",
             openai_batch_id=batch.openai_batch_id,
-            task_id=batch.task_id,
+            task_id=str(batch.task_id) if batch.task_id else None,
             endpoint=batch.endpoint,
             completion_window=batch.completion_window,
             status=batch.status,

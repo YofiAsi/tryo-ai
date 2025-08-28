@@ -41,7 +41,7 @@ class Batch(Document):
     project: Optional[str] = Field(default=None)
 
     # Batch task
-    task_id: Optional[str] = Field(default=None)
+    task_id: Optional[PydanticObjectId] = Field(default=None)
 
     # Estimated tokens
     estimated_tokens: int = Field(default=0)

@@ -1,8 +1,14 @@
+"""
+BatchTaskRepository for managing batch tasks in the database.
+"""
+from __future__ import annotations
+
 import json
 import logging
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, AsyncIterator, List
 
 from app.conf.page_response import PageResponse
+from app.entity.batch_entity import Batch, BatchStatus
 from app.entity.batch_task_entity import BatchTask, BatchTaskStatus
 from app.errors.business_exception import BusinessException, ErrorCodes
 
@@ -102,7 +108,7 @@ class BatchTaskRepository:
         _log.debug("BatchTaskRepository Tasks counted")
         return result
 
-    async def retrieve(self, id: str) -> BatchTask:
+    async def retrieve(self, id: PydanticObjectId) -> BatchTask:
         _log.debug(f"BatchTaskRepository Retrieving batch_task: {id}")
         batch_task = await BatchTask.find_one({"_id": id})
         if not batch_task:
@@ -110,9 +116,9 @@ class BatchTaskRepository:
         _log.debug("BatchTaskRepository BatchTask retrieved")
         return batch_task
 
-    async def retrieve_by_task_id(self, id: "PydanticObjectId") -> BatchTask:
+    async def retrieve_by_task_id(self, id: PydanticObjectId) -> BatchTask:
         _log.debug(f"BatchTaskRepository Retrieving batch_task by id: {id}")
-        batch_task = await BatchTask.find_one({"id": id})
+        batch_task = await BatchTask.find_one({"_id": id})
         if not batch_task:
             raise BusinessException(ErrorCodes.NOT_FOUND, f"BatchTask not found: {id}")
         _log.debug("BatchTaskRepository BatchTask retrieved")
@@ -173,7 +179,20 @@ class BatchTaskRepository:
         _log.debug("BatchTaskRepository Tasks counted by status")
         return result
 
-    async def find_tasks_created_after(self, after_date: "datetime", page: int = 1, size: int = 10) -> PageResponse[BatchTask]:
+    async def find_tasks_by_batch_id(self, batch_id: PydanticObjectId) -> List[BatchTask]:
+        """
+        Get all batch tasks that have the batch id in their batch_ids list.
+        
+        Args:
+            batch_id: Batch ID
+            
+        Returns:
+            List[BatchTask]: List of batch tasks
+        """
+        batch_tasks = await BatchTask.find({"batch_ids": {"$in": [batch_id]}}).to_list()
+        return batch_tasks
+
+    async def find_tasks_created_after(self, after_date: datetime, page: int = 1, size: int = 10) -> PageResponse[BatchTask]:
         _log.debug(f"BatchTaskRepository Finding batch_tasks created after: {after_date}")
         query = {"created_at": {"$gte": after_date}}
         
@@ -188,3 +207,40 @@ class BatchTaskRepository:
         content = await document.to_list()
         _log.debug("BatchTaskRepository Tasks found by creation date")
         return PageResponse(content=content, page=page, size=size, total=total_count)
+
+    async def get_completed_running_tasks_iterator(self) -> AsyncIterator[BatchTask]:
+        """
+        Stream all BatchTask documents that are RUNNING and whose referenced
+        batches are ALL COMPLETED. Results are parsed as BatchTask models.
+        """
+        pipeline = [
+            # Only tasks that are currently RUNNING and actually have batches
+            {"$match": {
+                "status": BatchTaskStatus.RUNNING.value,
+                "batch_ids": {"$ne": []},
+            }},
+            {
+                # Pull ONLY the not-completed batches among the referenced ids
+                "$lookup": {
+                    "from": Batch.get_collection_name(),
+                    "let": {"ids": "$batch_ids"},
+                    "pipeline": [
+                        {"$match": {"$expr": {"$in": ["$_id", "$$ids"]}}},
+                        {"$match": {"status": {"$ne": BatchStatus.COMPLETED.value}}},
+                        {"$limit": 1},                 # short-circuit: we just need to know if any exist
+                    ],
+                    "as": "incomplete_batches",
+                }
+            },
+            # Keep only tasks with zero not-completed batches => all completed
+            {"$match": {"incomplete_batches": {"$size": 0}}},
+            # Remove lookup helper so projection to BatchTask is clean
+            {"$project": {"incomplete_batches": 0}},
+        ]
+
+        # Parse each aggregation result back into a BatchTask model
+        query = BatchTask.aggregate(pipeline, projection_model=BatchTask)
+
+        # Beanie's aggregation query supports async iteration over results
+        async for task in query:
+            yield task

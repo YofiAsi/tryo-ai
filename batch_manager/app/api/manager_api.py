@@ -10,11 +10,12 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi.responses import JSONResponse
 
-from app.conf.dependencies import get_batch_task_create_service, get_batch_task_service
+from app.conf.dependencies import get_batch_scheduler_service, get_batch_task_create_service, get_batch_task_service
 from app.entity.batch_task_entity import BatchTask, BatchTaskType
 from app.schema.batch_task_dto import BatchTaskDTO, CreateBatchTaskDTO
 
 if TYPE_CHECKING:
+    from app.service.batch_scheduler_service import BatchSchedulerService
     from app.service.batch_task_create_service import BatchTaskCreateService
     from app.service.batch_task_service import BatchTaskService
 
@@ -87,7 +88,7 @@ async def create_batch_task(
 )
 async def get_batch_task(
     task_id: str,
-    batch_task_service: Annotated[BatchTaskService, Depends(get_batch_task_service)],
+    batch_task_service: BatchTaskService = Depends(get_batch_task_service),
 ) -> JSONResponse:
     """Get a batch task by its ID."""
     try:
@@ -106,6 +107,91 @@ async def get_batch_task(
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"error": f"Failed to retrieve batch task: {e!s}"},
+        )
+
+
+@router.get(
+    path="/scheduler/status",
+    operation_id="get_scheduler_status",
+    name="get_scheduler_status",
+    summary="Get batch scheduler status",
+    description="Get the current status of the batch scheduler and its jobs",
+    status_code=status.HTTP_200_OK,
+)
+async def get_scheduler_status(
+    batch_scheduler_service: BatchSchedulerService = Depends(get_batch_scheduler_service),
+) -> JSONResponse:
+    """Get the current status of the batch scheduler and its scheduled jobs."""
+    try:
+        status_info = batch_scheduler_service.get_job_status()
+        return JSONResponse(status_code=status.HTTP_200_OK, content=status_info)
+    
+    except Exception as e:
+        _log.error(f"Error retrieving scheduler status: {e!s}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"error": f"Failed to retrieve scheduler status: {e!s}"},
+        )
+
+
+@router.get(
+    path="/scheduler/health",
+    operation_id="get_scheduler_health",
+    name="get_scheduler_health",
+    summary="Get batch scheduler health status",
+    description="Get the health status of the batch scheduler for monitoring and alerting",
+    status_code=status.HTTP_200_OK,
+)
+async def get_scheduler_health(
+    batch_scheduler_service: BatchSchedulerService = Depends(get_batch_scheduler_service),
+) -> JSONResponse:
+    """Get the health status of the batch scheduler for monitoring purposes."""
+    try:
+        health_info = batch_scheduler_service.get_health_status()
+        
+        # Return appropriate HTTP status based on health
+        if health_info["health_status"] == "healthy":
+            status_code = status.HTTP_200_OK
+        elif health_info["health_status"] == "warning":
+            status_code = status.HTTP_200_OK  # Still OK but with warnings
+        else:  # critical
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            
+        return JSONResponse(status_code=status_code, content=health_info)
+    
+    except Exception as e:
+        _log.error(f"Error retrieving scheduler health: {e!s}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"error": f"Failed to retrieve scheduler health: {e!s}"},
+        )
+
+
+@router.post(
+    path="/scheduler/cleanup",
+    operation_id="cleanup_scheduler_history",
+    name="cleanup_scheduler_history",
+    summary="Clean up old scheduler execution history",
+    description="Clean up old job execution history to prevent memory leaks",
+    status_code=status.HTTP_200_OK,
+)
+async def cleanup_scheduler_history(
+    max_age_hours: int = 24,
+    batch_scheduler_service: BatchSchedulerService = Depends(get_batch_scheduler_service),
+) -> JSONResponse:
+    """Clean up old scheduler execution history."""
+    try:
+        cleaned_count = batch_scheduler_service.cleanup_old_execution_history(max_age_hours)
+        return JSONResponse(
+            status_code=status.HTTP_200_OK, 
+            content={"cleaned_records": cleaned_count, "max_age_hours": max_age_hours}
+        )
+    
+    except Exception as e:
+        _log.error(f"Error cleaning up scheduler history: {e!s}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"error": f"Failed to cleanup scheduler history: {e!s}"},
         )
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, List, Optional
 
 from app.conf.page_response import PageResponse
 from app.entity.batch_entity import Batch, BatchStatus
@@ -114,7 +114,7 @@ class BatchRepository:
 
     async def retrieve_by_batch_id(self, batch_id: PydanticObjectId) -> Batch:
         _log.debug(f"BatchRepository Retrieving batch by batch_id: {batch_id}")
-        doc = await Batch.find_one({"id": batch_id})
+        doc = await Batch.find_one({"_id": batch_id})
         if not doc:
             raise BusinessException(ErrorCodes.NOT_FOUND, f"Batch not found: {batch_id}")
         _log.debug("BatchRepository Batch retrieved")
@@ -261,3 +261,19 @@ class BatchRepository:
         _log.debug("BatchRepository Batches with errors found")
         return PageResponse(content=content, page=page, size=size, total=total_count)
 
+    async def get_pending_batches_iterator(self) -> AsyncIterator[Batch]:
+        """
+        Get pending batches iterator.
+        """
+        cursor = Batch.find({"status": BatchStatus.PENDING_UPLOAD.value}).sort("-created_at")
+        async for batch in cursor:
+            yield batch
+    
+    async def get_batches_in_progress_iterator(self) -> AsyncIterator[Batch]:
+        cursor = Batch.find({"status": {"$in": [
+            BatchStatus.VALIDATING.value,
+            BatchStatus.IN_PROGRESS.value,
+            BatchStatus.FINALIZING.value
+        ]}}).sort("-created_at")
+        async for batch in cursor:
+            yield batch

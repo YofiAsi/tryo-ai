@@ -24,6 +24,12 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+class NoAvailableClient(Exception):
+    def __init__(self, tokens: int, model: AIModel):
+        self.tokens = tokens
+        self.model = model
+        super().__init__(f"No client available with enough tokens for model {model} and tokens {tokens}")
+
 @dataclass
 class MultiKeyOpenAiClientServiceResponse(Generic[T]):
     client_name: str
@@ -36,8 +42,12 @@ class MultiKeyOpenAiClientService:
         self.client_names: List[str] = []
         self.current_index = 0
         self.openai_client_repository = openai_client_repository
+        self._initialized = False
 
     async def init_clients(self) -> None:
+        if self._initialized:
+            return
+            
         names_keys = {
             name: key for name, key in os.environ.items()
             if name.startswith("BATCH_OPENAI_API_KEY_") and key
@@ -52,6 +62,8 @@ class MultiKeyOpenAiClientService:
             
             self.clients_by_name[name] = OpenAiSdkClient(key, document)
             self.client_names.append(name)
+            
+        self._initialized = True
 
     async def reset_usage_if_needed(self) -> None:
         now = datetime.now(timezone.utc)
@@ -66,6 +78,9 @@ class MultiKeyOpenAiClientService:
 
     @contextmanager
     def get_client(self, tokens: int, model: AIModel) -> Generator[Optional[OpenAiClientContext], None, None]:
+        if not self._initialized:
+            raise RuntimeError("MultiKeyOpenAiClientService not initialized. Call init_clients() during server startup.")
+            
         self.rotation_lock.acquire()
         released = False
         try:
@@ -114,7 +129,7 @@ class MultiKeyOpenAiClientService:
     async def execute(self, tokens: int, model: AIModel, operation_func: Callable[[OpenAI], T]) -> MultiKeyOpenAiClientServiceResponse[T]:
         with self.get_client(tokens, model) as client_context:
             if not client_context:
-                raise Exception("No client available")
+                raise NoAvailableClient(tokens, model)
             response = self._execute_with_backoff(client_context.sdk, operation_func)
             if response:
                 client_context.document.register_usage(model, tokens)
@@ -122,6 +137,9 @@ class MultiKeyOpenAiClientService:
             return MultiKeyOpenAiClientServiceResponse(client_name=client_context.name, response=response)
     
     def execute_with_client_name_no_tokens(self, client_name: str, operation_func: Callable[[OpenAI], T]) -> MultiKeyOpenAiClientServiceResponse[T]:
+        if not self._initialized:
+            raise RuntimeError("MultiKeyOpenAiClientService not initialized. Call init_clients() during server startup.")
+            
         if client_name not in self.clients_by_name:
             raise Exception("Invalid client name")
         

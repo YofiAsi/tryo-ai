@@ -1,27 +1,34 @@
 """Service for managing OpenAI batch operations."""
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable, Literal, Optional
+from typing import TYPE_CHECKING, AsyncIterator, Callable, List, Literal, Optional
 
 from openai.types.batch_request_counts import BatchRequestCounts as BatchRequestCountsDTO
 
 from app.entity.batch_entity import Batch, BatchStatus
+from app.errors.business_exception import BusinessException, ErrorCodes
+from app.service.multi_key_openai_service import NoAvailableClient
 from app.service.openai_api_service import BatchOperationResponse
 
 if TYPE_CHECKING:
+    from beanie import PydanticObjectId
     from openai import OpenAI
     from openai.types.batch import Batch as OpenAiBatchDTO
 
     from app.repository.batch_repository import BatchRepository
     from app.repository.file_storage_repository import FileStorageRepository
+    from app.service.batch_task_service import BatchTaskService
     from app.service.multi_key_openai_service import MultiKeyOpenAiClientService, MultiKeyOpenAiClientServiceResponse
 
 BATCH_FILE_EXPIRATION_TIME = 864000 # 10 days
 BATCH_COMPLETION_WINDOW: Literal["24h"] = "24h"
+
+_log = logging.getLogger(__name__)
 
 @dataclass
 class DownloadBatchFilesResponse:
@@ -34,9 +41,11 @@ class BatchService:
         multi_key_openai_client_service: MultiKeyOpenAiClientService,
         batch_file_storage_repository: FileStorageRepository,
         batch_repository: BatchRepository,
+        batch_task_service: BatchTaskService,
     ):
         self.multi_key_openai_client_service = multi_key_openai_client_service
         self.batch_file_storage_repository = batch_file_storage_repository
+        self.batch_task_service = batch_task_service
         self.batch_repository = batch_repository
 
     def _get_batch_operation(self, batch: Batch, temp_file_path: str) -> Callable[[OpenAI], BatchOperationResponse]:
@@ -73,14 +82,13 @@ class BatchService:
         client_response: MultiKeyOpenAiClientServiceResponse[BatchOperationResponse],
     ) -> Batch:
         batch_operation_response: BatchOperationResponse = client_response.response
-        client_name: str = client_response.client_name
         batch.openai_batch_id = batch_operation_response.batch_operation_response.id
         batch.input_file_id = batch_operation_response.file_operation_response.id
-        batch.api_client_name = client_name
+        batch.api_client_name = client_response.client_name
         batch.status = BatchStatus.VALIDATING
         return await self.batch_repository.update(batch)
     
-    async def create_openai_batch(self, batch: Batch) -> Batch:
+    async def create_openai_batch(self, batch: Batch) -> Optional[Batch]:
         if not batch.db_input_file_name:
             raise ValueError(f"Batch {batch.id} has no input file ID")
         
@@ -98,7 +106,7 @@ class BatchService:
             batch = await self._update_batch_after_batch_operation(batch, client_response)
             
             return batch
-            
+
         except Exception as e:
             # Update batch to failed status on error
             batch.status = BatchStatus.FAILED
@@ -292,3 +300,67 @@ class BatchService:
             
         except Exception as e:
             raise Exception(f"Failed to download and store batch results for {batch.id}: {e}")
+
+    async def start_batch(self, batch: Batch) -> bool:
+        """
+        Start a batch.
+        """
+        if batch.status != BatchStatus.PENDING_UPLOAD:
+            raise BusinessException(ErrorCodes.INVALID_STATE, f"Batch {batch.id} is not in the pending upload state")
+        
+        openai_batch: Optional[Batch] = await self.create_openai_batch(batch)
+        if not openai_batch:
+            return False
+
+        return True
+
+    async def get_pending_batches_iterator(self) -> AsyncIterator[Batch]:
+        """
+        Get pending batches iterator.
+        """
+        return self.batch_repository.get_pending_batches_iterator()
+
+    async def update_and_check_batch_completed(self, batch: Batch) -> bool:
+        if batch.is_completed:
+            return True
+        
+        updated_batch = await self.update_batch_status(batch)
+
+        return updated_batch.is_completed
+    
+    async def get_batches_in_progress_iterator(self) -> AsyncIterator[Batch]:
+        """
+        Get batches in progress iterator.
+        """
+        return self.batch_repository.get_batches_in_progress_iterator()
+
+    async def _notify_batch_task_running(self, batch: Batch) -> None:
+        if not batch.task_id:
+            return
+        await self.batch_task_service.update_task_status_running_if_needed(batch.task_id)
+        
+    async def start_pending_batches(self) -> List[PydanticObjectId]:
+        pending_batches: AsyncIterator[Batch] = await self.get_pending_batches_iterator()
+        started_batches_ids: List[PydanticObjectId] = []
+        async for batch in pending_batches:
+            try:
+                if await self.start_batch(batch):
+                    await self._notify_batch_task_running(batch)
+                    started_batches_ids.append(batch.id)
+                else:
+                    _log.error(f"Failed to start batch {batch.id}")
+            except NoAvailableClient:
+                continue
+        
+        return started_batches_ids
+
+    async def check_on_batches_in_progress(self) -> List[PydanticObjectId]:
+        batches_in_progress: AsyncIterator[Batch] = await self.get_batches_in_progress_iterator()
+        completed_batches_ids: List[PydanticObjectId] = []
+        async for batch in batches_in_progress:
+            completed = await self.update_and_check_batch_completed(batch)
+            if completed:
+                await self.download_and_store_batch_files(batch)
+                completed_batches_ids.append(batch.id)
+        
+        return completed_batches_ids

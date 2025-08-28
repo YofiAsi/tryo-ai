@@ -4,7 +4,7 @@ BatchTaskService for managing batch processing tasks.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 
 from app.entity.batch_entity import Batch, BatchStatus
 from app.entity.batch_task_entity import BatchTask, BatchTaskStatus
@@ -13,7 +13,7 @@ from app.errors.business_exception import BusinessException, ErrorCodes
 if TYPE_CHECKING:
     from beanie import PydanticObjectId
     from openai.types.batch_request_counts import BatchRequestCounts as BatchRequestCountsDTO
-    
+
     from app.repository.batch_repository import BatchRepository
     from app.repository.batch_task_repository import BatchTaskRepository
     from app.service.batch_service import BatchService, DownloadBatchFilesResponse
@@ -34,50 +34,7 @@ class BatchTaskService:
         self.batch_repository = batch_repository
         self.batch_service = batch_service
     
-    async def start_next_batch(self, task_id: PydanticObjectId) -> bool:
-        """
-        Start the next pending batch in a task.
-        
-        Args:
-            task_id: Task ID
-            
-        Returns:
-            bool: True if a batch was started, False if no pending batches
-            
-        Raises:
-            BusinessException: If task not found or invalid state
-            Exception: For API or database errors
-        """
-        try:
-            # Get task information
-            batch_task: BatchTask = await self.batch_task_repository.retrieve_by_task_id(task_id)
-            if not batch_task:
-                raise BusinessException(ErrorCodes.NOT_FOUND, f"Task not found: {task_id}")
-            
-            # Find next pending batch
-            pending_batch = await self._find_next_pending_batch(batch_task)
-            if not pending_batch:
-                _log.info(f"No pending batches found for task {task_id}")
-                return False
-            
-            # Start the batch using BatchService
-            started_batch = await self.batch_service.create_openai_batch(pending_batch)
-            
-            if started_batch and started_batch.status != BatchStatus.FAILED:
-                # Update task status to running if it was created
-                await self._update_task_status_if_needed(batch_task, BatchTaskStatus.RUNNING)
-                _log.info(f"Started batch {started_batch.id} for task {task_id}")
-                return True
-            
-            return False
-            
-        except BusinessException:
-            raise
-        except Exception as e:
-            _log.error(f"Failed to start next batch for task {task_id}: {e}")
-            raise Exception(f"Failed to start next batch for task {task_id}: {e}")
-    
-    async def _find_next_pending_batch(self, batch_task: BatchTask) -> Optional[Batch]:
+    async def get_next_pending_batch(self, batch_task: BatchTask) -> Optional[Batch]:
         """Find the next pending batch for a task."""
         for batch_id in batch_task.batch_ids:
             batch = await self.batch_repository.retrieve_by_batch_id(batch_id)
@@ -370,18 +327,21 @@ class BatchTaskService:
             _log.error(f"Failed to update task progress for {task_id}: {e}")
             raise Exception(f"Failed to update task progress for {task_id}: {e}")
     
-    async def _update_task_status_if_needed(self, batch_task: BatchTask, new_status: BatchTaskStatus) -> None:
+    async def update_task_status_running_if_needed(self, batch_task_id: PydanticObjectId) -> bool:
         """Update task status if it's in the right state for transition."""
         try:
+            batch_task = await self.batch_task_repository.retrieve(batch_task_id)
+            if not batch_task:
+                raise BusinessException(ErrorCodes.NOT_FOUND, f"Task not found: {batch_task_id}")
+
             # Only transition from created to running
-            if batch_task.status != new_status:
-                if new_status == BatchTaskStatus.RUNNING and batch_task.status == BatchTaskStatus.CREATED:
-                    batch_task.start()
-                    await self.batch_task_repository.update(batch_task)
-                    
+            if batch_task.status == BatchTaskStatus.CREATED:
+                batch_task.start()
+                await self.batch_task_repository.update(batch_task)
+            return True
         except Exception as e:
-            _log.warning(f"Failed to update task status: {e}")
-            # Don't raise - this is not critical for batch starting
+            _log.error(f"Failed to update task status: {e}")
+            raise Exception(f"Failed to update task status: {e}")
     
     async def pause_task(self, task_id: PydanticObjectId) -> bool:
         """
@@ -487,3 +447,37 @@ class BatchTaskService:
         except Exception as e:
             _log.error(f"Failed to get task batches for {task_id}: {e}")
             raise Exception(f"Failed to get task batches for {task_id}: {e}")
+
+    async def get_batch_tasks_from_batch_id(self, batch_id: PydanticObjectId) -> List[BatchTask]:
+        """
+        Get all the batch tasks associated with a batch id.
+        
+        Args:
+            batch_id: Batch ID
+            
+        Returns:
+            List[BatchTask]: List of batch tasks
+        """
+        batch_tasks = await self.batch_task_repository.find_tasks_by_batch_id(batch_id)
+        return batch_tasks
+
+    async def get_completed_running_tasks_iterator(self) -> AsyncIterator[BatchTask]:
+        """
+        Get all the batch tasks that are in progress.
+        """
+        return self.batch_task_repository.get_completed_running_tasks_iterator()
+
+    async def complete_batch_task(self, batch_task: BatchTask) -> None:
+        """
+        Complete a batch task.
+        """
+        await self.update_task_status(batch_task.id, BatchTaskStatus.COMPLETED)
+
+    async def check_and_complete_batch_tasks(self) -> List[PydanticObjectId]:
+        iterator: AsyncIterator[BatchTask] = await self.get_completed_running_tasks_iterator()
+        completed_tasks: List[PydanticObjectId] = []
+        async for task in iterator:
+            await self.complete_batch_task(task)
+            completed_tasks.append(task.id)
+        
+        return completed_tasks
