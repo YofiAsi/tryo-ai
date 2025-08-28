@@ -16,7 +16,8 @@ from app.entity.user_entity import User
 from app.service.ai_agents_service import AIAgentsService
 from app.conf.app_settings import server_settings
 from app.api.api_response import response_fail_status_codes
-from app.schema.ai_agents_dto import JobPositionChatRequest, JobPositionChatResponse, JobPositionChatServiceRequest
+from app.schema.ai_agents_dto import JobPositionAnalyzerRequest, JobPositionChatRequest, JobPositionChatResponse, JobPositionChatServiceRequest, JobPositionAnalyzerServiceRequest
+from app.schema.job_position_dto import CreateJobPositionDTO
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 from pydantic_core import to_jsonable_python
 
@@ -75,3 +76,39 @@ async def chat_with_job_analyzer(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to chat with job analyzer: {str(e)}"
         )
+
+@router.post("/job-position/analyze",
+             operation_id="analyze_job_position",
+             name="analyze_job_position",
+             summary="Analyze job position",
+             response_model=CreateJobPositionDTO,
+             status_code=status.HTTP_200_OK)
+async def analyze_job_position(
+    request: JobPositionAnalyzerRequest,
+    ai_service: AIAgentsService = Depends(get_ai_agents_service)
+) -> CreateJobPositionDTO:
+    """
+    Chat with the Job Position Analyzer Agent.
+    
+    Args:
+        request: Chat request containing the message and message history
+        
+    Returns:
+        Chat response from the AI agent with output and updated message history
+    """
+    try:
+        service_request = JobPositionAnalyzerServiceRequest(
+            message_history=ModelMessagesTypeAdapter.validate_python(json.loads(request.message_history))
+        )
+
+        result = await ai_service.job_position_analyzer(service_request)
+        _log.info("Job position analyzer completed")
+        
+        return result
+    except Exception as e:
+        _log.error(f"Error in job position analyzer: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze job position: {str(e)}"
+        )
+

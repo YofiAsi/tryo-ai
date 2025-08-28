@@ -86,3 +86,30 @@ class JobPositionChatResponse(BaseModelJsonSerializable):
         default=None,
         description="List of previous messages in the conversation for context in json format"
     )
+
+
+class JobPositionAnalyzerServiceRequest(BaseModelJsonSerializable):
+    """
+    Request DTO for job position analyzer interactions.
+    
+    This model represents the input for a job position analyzer session.
+    """
+    
+    message_history: Optional[List[ModelMessage]] = Field(
+        default=None,
+        description="List of previous messages in the conversation for context"
+    )
+
+
+class JobPositionAnalyzerRequest(BaseModelJsonSerializable):
+    """
+    Request DTO for job position analyzer interactions.
+    
+    This model represents the input for a job position analyzer session.
+    """
+    
+    message_history: str = Field(
+        default=None,
+        description="List of previous messages in the conversation for context in json format"
+    )
+
