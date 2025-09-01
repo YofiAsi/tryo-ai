@@ -11,3 +11,4 @@ motor
 pymongo
 python-dotenv
 debugpy
+apscheduler

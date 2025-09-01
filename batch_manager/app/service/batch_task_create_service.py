@@ -32,6 +32,8 @@ from app.entity.batch_task_entity import BatchTask, BatchTaskType
 from app.errors.business_exception import BusinessException, ErrorCodes
 
 if TYPE_CHECKING:
+    from beanie import PydanticObjectId
+
     from app.repository.batch_repository import BatchRepository
     from app.repository.batch_task_repository import BatchTaskRepository
     from app.repository.file_storage_repository import FileMetadata, FileStorageRepository
@@ -42,10 +44,11 @@ TOKENS_RATE_LIMIT_THRESHOLD_MULTIPLIER = 0.2
 
 
 class BatchFileHandler:
-    def __init__(self, ai_model: AIModel, endpoint: str, tmp_dir: Path):
+    def __init__(self, ai_model: AIModel, endpoint: str, tmp_dir: Path, task_id: PydanticObjectId):
         self.entity: Batch = Batch(
             ai_model=ai_model,
             endpoint=endpoint,
+            task_id=task_id,
         )
         self.file_path: Path = tmp_dir / f"{self.entity.id}.jsonl"
         self.file_handle: TextIO = open(self.file_path, "w", encoding="utf-8")
@@ -164,6 +167,7 @@ class BatchTaskCreateService:
                         ai_model=model,
                         endpoint=self.batch_task.endpoint,
                         tmp_dir=self.tmp_dir,
+                        task_id=self.batch_task.id,
                     )
                 ]
 
@@ -175,6 +179,7 @@ class BatchTaskCreateService:
                         ai_model=model,
                         endpoint=self.batch_task.endpoint,
                         tmp_dir=self.tmp_dir,
+                        task_id=self.batch_task.id,
                     )
                 )
 

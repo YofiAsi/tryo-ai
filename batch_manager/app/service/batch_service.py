@@ -126,7 +126,7 @@ class BatchService:
             return batch_response
         return batch_retrieve_operation
 
-    def get_batch_full_status(self, batch: Batch) -> OpenAiBatchDTO:
+    def get_updated_batch(self, batch: Batch) -> OpenAiBatchDTO:
         if not batch.api_client_name:
             raise ValueError("Batch has no API client name")
         
@@ -144,13 +144,13 @@ class BatchService:
         except Exception as e:
             raise Exception(f"Failed to get batch status for {batch.id}: {e}")
     
-    async def update_batch_status(self, batch: Batch) -> Batch:
+    async def update_batch(self, batch: Batch) -> Batch:
         if batch.status == BatchStatus.PENDING_UPLOAD:
             return batch
         
         try:
-            batch_full_status: OpenAiBatchDTO = self.get_batch_full_status(batch)
-            batch.update_with_batch_dto(batch_full_status)
+            updated_batch: OpenAiBatchDTO = self.get_updated_batch(batch)
+            batch.update_with_batch_dto(updated_batch)
             return await self.batch_repository.update(batch)
         except Exception as e:
             # If we can't get status, mark as failed if it's not already in a terminal state
@@ -188,7 +188,7 @@ class BatchService:
                 return BatchRequestCountsDTO(total=0, completed=0, failed=0)
             
             try:
-                batch_full_status: OpenAiBatchDTO = self.get_batch_full_status(batch)
+                batch_full_status: OpenAiBatchDTO = self.get_updated_batch(batch)
                 return batch_full_status.request_counts if batch_full_status.request_counts else BatchRequestCountsDTO(total=0, completed=0, failed=0)
             except Exception:
                 # Fall back to stored values if API call fails
@@ -267,39 +267,35 @@ class BatchService:
     async def download_and_store_batch_files(self, batch: Batch) -> DownloadBatchFilesResponse:
         """
         Download batch results and store them in MinIO.
-        
+        Update batch with relevant stats.
+
         Args:
             batch: Batch entity
             
         Returns:
-            str: MinIO object name where the file was stored
-            
-        Raises:
-            ValueError: If batch not completed
-            Exception: For API, database, or file processing errors
+            DownloadBatchFilesResponse: Response containing the output and error file names
         """
-        try:
-            updated_batch: Batch = await self.update_batch_status(batch)
-            
-            if updated_batch.output_file_id:
-                output_file_content = await self.download_output_batch_file(updated_batch)
-                if not output_file_content:
-                    raise ValueError("Failed to download batch output file - batch may not be completed")
-                file_metadata = self.batch_file_storage_repository.store_batch_results(str(updated_batch.id), output_file_content)
-                updated_batch.db_output_file_name = file_metadata.minio_object_name
-            
-            if updated_batch.error_file_id:
-                error_file_content = await self.download_error_batch_file(updated_batch)
-                if not error_file_content:
-                    raise ValueError("Failed to download batch error file - batch may not be completed")
-                file_metadata = self.batch_file_storage_repository.store_batch_errors(str(updated_batch.id), error_file_content)
-                updated_batch.db_error_file_name = file_metadata.minio_object_name
-            
-            await self.batch_repository.update(updated_batch)
-            return DownloadBatchFilesResponse(output_file_name=updated_batch.db_output_file_name, error_file_name=updated_batch.db_error_file_name)
-            
-        except Exception as e:
-            raise Exception(f"Failed to download and store batch results for {batch.id}: {e}")
+        _uploaded: bool = False
+        if batch.output_file_id:
+            output_file_content = await self.download_output_batch_file(batch)
+            if not output_file_content:
+                raise ValueError("Failed to download batch output file - batch may not be completed")
+            file_metadata = self.batch_file_storage_repository.store_batch_results(str(batch.id), output_file_content)
+            batch.db_output_file_name = file_metadata.minio_object_name
+            _uploaded = True
+        if batch.error_file_id:
+            error_file_content = await self.download_error_batch_file(batch)
+            if not error_file_content:
+                raise ValueError("Failed to download batch error file - batch may not be completed")
+            file_metadata = self.batch_file_storage_repository.store_batch_errors(str(batch.id), error_file_content)
+            batch.db_error_file_name = file_metadata.minio_object_name
+            _uploaded = True
+        
+        if _uploaded:
+            batch.files_collected = True
+            await self.batch_repository.update(batch)
+        
+        return DownloadBatchFilesResponse(output_file_name=batch.db_output_file_name, error_file_name=batch.db_error_file_name)
 
     async def start_batch(self, batch: Batch) -> bool:
         """
@@ -314,25 +310,17 @@ class BatchService:
 
         return True
 
-    async def get_pending_batches_iterator(self) -> AsyncIterator[Batch]:
+    def get_pending_batches_iterator(self) -> AsyncIterator[Batch]:
         """
         Get pending batches iterator.
         """
         return self.batch_repository.get_pending_batches_iterator()
-
-    async def update_and_check_batch_completed(self, batch: Batch) -> bool:
-        if batch.is_completed:
-            return True
-        
-        updated_batch = await self.update_batch_status(batch)
-
-        return updated_batch.is_completed
     
-    async def get_batches_in_progress_iterator(self) -> AsyncIterator[Batch]:
+    def get_non_terminal_state_batches_iterator(self) -> AsyncIterator[Batch]:
         """
-        Get batches in progress iterator.
+        Get non terminal state batches iterator.
         """
-        return self.batch_repository.get_batches_in_progress_iterator()
+        return self.batch_repository.get_non_terminal_state_batches_iterator()
 
     async def _notify_batch_task_running(self, batch: Batch) -> None:
         if not batch.task_id:
@@ -340,7 +328,7 @@ class BatchService:
         await self.batch_task_service.update_task_status_running_if_needed(batch.task_id)
         
     async def start_pending_batches(self) -> List[PydanticObjectId]:
-        pending_batches: AsyncIterator[Batch] = await self.get_pending_batches_iterator()
+        pending_batches: AsyncIterator[Batch] = self.get_pending_batches_iterator()
         started_batches_ids: List[PydanticObjectId] = []
         async for batch in pending_batches:
             try:
@@ -354,13 +342,9 @@ class BatchService:
         
         return started_batches_ids
 
-    async def check_on_batches_in_progress(self) -> List[PydanticObjectId]:
-        batches_in_progress: AsyncIterator[Batch] = await self.get_batches_in_progress_iterator()
-        completed_batches_ids: List[PydanticObjectId] = []
-        async for batch in batches_in_progress:
-            completed = await self.update_and_check_batch_completed(batch)
-            if completed:
-                await self.download_and_store_batch_files(batch)
-                completed_batches_ids.append(batch.id)
+    async def update_non_terminal_state_batches(self) -> None:
+        non_terminal_state_batches: AsyncIterator[Batch] = self.get_non_terminal_state_batches_iterator()
+        async for batch in non_terminal_state_batches:
+            await self.update_batch(batch)
+            await self.download_and_store_batch_files(batch)
         
-        return completed_batches_ids

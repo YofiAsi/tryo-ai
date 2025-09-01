@@ -130,84 +130,6 @@ class BatchTaskService:
             _log.error(f"Failed to update task status for {task_id}: {e}")
             raise Exception(f"Failed to update task status for {task_id}: {e}")
     
-    async def collect_completed_batch_results(self, task_id: PydanticObjectId) -> Dict[str, Any] | None:
-        """
-        Collect results for all completed batches in a task and update their status.
-        
-        Args:
-            task_id: Task ID to process
-            
-        Returns:
-            dict: Summary of processing results with counts and any errors
-            
-        Raises:
-            BusinessException: If task not found
-            Exception: For database errors
-        """
-        try:
-            # Get task information
-            batch_task = await self.batch_task_repository.retrieve_by_task_id(task_id)
-            if not batch_task:
-                raise BusinessException(ErrorCodes.NOT_FOUND, f"Task not found: {task_id}")
-            
-            if not batch_task.batch_ids:
-                _log.info(f"No batches found for task {task_id}")
-                return {"processed": 0, "skipped": 0, "errors": []}
-            
-            # Track processing results
-            processed_count = 0
-            skipped_count = 0
-            errors = []
-            
-            _log.info(f"Processing completed batches for task {task_id}")
-            
-            # Process each batch
-            for batch_id in batch_task.batch_ids:                
-                try:
-                    batch = await self.batch_repository.retrieve_by_batch_id(batch_id)
-                    if not batch:
-                        error_msg = f"Batch {batch_id} not found"
-                        _log.error(error_msg)
-                        errors.append(error_msg)
-                        skipped_count += 1
-                        continue
-                    
-                    # Update batch status first
-                    batch = await self.batch_service.update_batch_status(batch)
-                    
-                    # Skip if not completed
-                    if batch.status != BatchStatus.COMPLETED:
-                        skipped_count += 1
-                        _log.debug(f"Skipping batch {batch_id} - status: {batch.status}")
-                        continue
-                    
-                    # Download and store batch results
-                    _log.info(f"Collecting results for batch {batch_id}")
-                    download_batch_files_response: DownloadBatchFilesResponse = await self.batch_service.download_and_store_batch_files(batch)
-                    if download_batch_files_response.output_file_name:
-                        batch.db_output_file_name = download_batch_files_response.output_file_name
-                    if download_batch_files_response.error_file_name:
-                        batch.db_error_file_name = download_batch_files_response.error_file_name
-                    await self.batch_repository.update(batch)
-                    
-                    processed_count += 1
-                    _log.info(f"Successfully collected results for batch {batch_id}")
-                    
-                except Exception as e:
-                    error_msg = f"Failed to collect results for batch {batch_id}: {str(e)}"
-                    _log.error(error_msg)
-                    errors.append(error_msg)
-                    skipped_count += 1
-                    continue
-                    
-            return {"processed": processed_count, "skipped": skipped_count, "errors": errors}
-            
-        except BusinessException:
-            raise
-        except Exception as e:
-            _log.error(f"Failed to collect completed batch results for task {task_id}: {e}")
-            raise Exception(f"Failed to collect completed batch results for task {task_id}: {e}")
-    
     async def _check_all_batches_completed(self, batch_task: BatchTask) -> bool:
         """Check if all batches in the task are completed."""
         for batch_id in batch_task.batch_ids:
@@ -461,7 +383,7 @@ class BatchTaskService:
         batch_tasks = await self.batch_task_repository.find_tasks_by_batch_id(batch_id)
         return batch_tasks
 
-    async def get_completed_running_tasks_iterator(self) -> AsyncIterator[BatchTask]:
+    def get_completed_running_tasks_iterator(self) -> AsyncIterator[BatchTask]:
         """
         Get all the batch tasks that are in progress.
         """
@@ -474,9 +396,9 @@ class BatchTaskService:
         await self.update_task_status(batch_task.id, BatchTaskStatus.COMPLETED)
 
     async def check_and_complete_batch_tasks(self) -> List[PydanticObjectId]:
-        iterator: AsyncIterator[BatchTask] = await self.get_completed_running_tasks_iterator()
+        tasks: AsyncIterator[BatchTask] = self.get_completed_running_tasks_iterator()
         completed_tasks: List[PydanticObjectId] = []
-        async for task in iterator:
+        async for task in tasks:
             await self.complete_batch_task(task)
             completed_tasks.append(task.id)
         

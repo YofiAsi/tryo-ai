@@ -11,7 +11,8 @@ from app.repository.batch_repository import BatchRepository
 from app.repository.batch_task_repository import BatchTaskRepository
 from app.repository.file_storage_repository import FileStorageRepository
 from app.repository.openai_client_repository import OpenAiClientRepository
-from app.service.batch_service import BatchService
+from app.service.batch_download_queue_service import BatchDownloadQueueService
+from app.service.batch_scheduler_service import BatchSchedulerService
 from app.service.batch_task_create_service import BatchTaskCreateService
 from app.service.manager_service import ManagerService
 from app.service.multi_key_openai_service import MultiKeyOpenAiClientService
@@ -63,6 +64,7 @@ def get_multi_key_openai_client() -> MultiKeyOpenAiClientService:
 # Global instances to handle circular dependency
 _batch_service_instance: BatchService | None = None
 _batch_task_service_instance: BatchTaskService | None = None
+_batch_download_queue_service_instance: BatchDownloadQueueService | None = None
 
 
 def _initialize_services() -> None:
@@ -115,8 +117,30 @@ def get_batch_task_service() -> BatchTaskService:
 def get_manager_service() -> ManagerService:
     """Get ManagerService instance"""
     batch_service: BatchService = get_batch_service()
-    return BatchTaskService(
-        batch_task_repository=batch_task_repo,
-        batch_repository=batch_repo,
-        batch_service=batch_service
+    batch_task_service: BatchTaskService = get_batch_task_service()
+    return ManagerService(
+        batch_service=batch_service,
+        batch_task_service=batch_task_service
     )
+
+
+async def get_batch_download_queue_service() -> BatchDownloadQueueService:
+    """Get BatchDownloadQueueService singleton instance"""
+    global _batch_download_queue_service_instance
+    
+    if _batch_download_queue_service_instance is None:
+        batch_service: BatchService = get_batch_service()
+        batch_repository: BatchRepository = get_batch_repository()
+        _batch_download_queue_service_instance = await BatchDownloadQueueService.get_instance(
+            batch_service=batch_service,
+            batch_repository=batch_repository
+        )
+    
+    return _batch_download_queue_service_instance
+
+
+@lru_cache()
+def get_batch_scheduler_service() -> BatchSchedulerService:
+    """Get BatchSchedulerService instance"""
+    manager_service: ManagerService = get_manager_service()
+    return BatchSchedulerService(manager_service=manager_service)

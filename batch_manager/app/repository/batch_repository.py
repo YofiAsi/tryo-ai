@@ -269,11 +269,33 @@ class BatchRepository:
         async for batch in cursor:
             yield batch
     
-    async def get_batches_in_progress_iterator(self) -> AsyncIterator[Batch]:
-        cursor = Batch.find({"status": {"$in": [
-            BatchStatus.VALIDATING.value,
-            BatchStatus.IN_PROGRESS.value,
-            BatchStatus.FINALIZING.value
+    async def get_non_terminal_state_batches_iterator(self) -> AsyncIterator[Batch]:
+        """
+        Get non terminal state batches iterator.
+        """
+        cursor = Batch.find({"status": {"$nin": [
+            BatchStatus.TERMINAL_STATES.value
         ]}}).sort("-created_at")
+        async for batch in cursor:
+            yield batch
+    
+    async def get_terminal_state_batches_iterator(self) -> AsyncIterator[Batch]:
+        """
+        Get terminal state batches iterator.
+        """
+        cursor = Batch.find({"status": {"$in": [
+            BatchStatus.TERMINAL_STATES.value
+        ]}}).sort("-completed_at")
+        async for batch in cursor:
+            yield batch
+
+    async def get_terminal_batches_no_files_iterator(self) -> AsyncIterator[Batch]:
+        """
+        Get terminal state batches iterator that do not have files collected.
+        """
+        cursor = Batch.find({"status": {"$in": [
+            BatchStatus.TERMINAL_STATES.value
+        ]}, "files_collected": False}).sort("-completed_at")
+        
         async for batch in cursor:
             yield batch

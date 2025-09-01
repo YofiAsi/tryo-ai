@@ -210,37 +210,71 @@ class BatchTaskRepository:
 
     async def get_completed_running_tasks_iterator(self) -> AsyncIterator[BatchTask]:
         """
-        Stream all BatchTask documents that are RUNNING and whose referenced
-        batches are ALL COMPLETED. Results are parsed as BatchTask models.
+        Get RUNNING BatchTasks whose referenced batches:
+        (a) all exist,
+        (b) are COMPLETED,
+        (c) have files_collected == True.
         """
         pipeline = [
-            # Only tasks that are currently RUNNING and actually have batches
             {"$match": {
-                "status": BatchTaskStatus.RUNNING.value,
-                "batch_ids": {"$ne": []},
-            }},
-            {
-                # Pull ONLY the not-completed batches among the referenced ids
-                "$lookup": {
-                    "from": Batch.get_collection_name(),
-                    "let": {"ids": "$batch_ids"},
-                    "pipeline": [
-                        {"$match": {"$expr": {"$in": ["$_id", "$$ids"]}}},
-                        {"$match": {"status": {"$ne": BatchStatus.COMPLETED.value}}},
-                        {"$limit": 1},                 # short-circuit: we just need to know if any exist
-                    ],
-                    "as": "incomplete_batches",
+                "$expr": {
+                    "$and": [
+                        {"$eq": [{"$type": "$batch_ids"}, "array"]},
+                        {"$gt": [{"$size": "$batch_ids"}, 0]},
+                    ]
                 }
-            },
-            # Keep only tasks with zero not-completed batches => all completed
-            {"$match": {"incomplete_batches": {"$size": 0}}},
-            # Remove lookup helper so projection to BatchTask is clean
-            {"$project": {"incomplete_batches": 0}},
+            }},
+            # how many referenced batches actually exist?
+            {"$lookup": {
+                "from": Batch.get_collection_name(),
+                "let": {"ids": "$batch_ids"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$in": ["$_id", "$$ids"]}}},
+                    {"$count": "matched"}
+                ],
+                "as": "matched_stats",
+            }},
+            # how many are "bad" (not completed OR files not collected)?
+            {"$lookup": {
+                "from": Batch.get_collection_name(),
+                "let": {"ids": "$batch_ids"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$in": ["$_id", "$$ids"]}}},
+                    {"$match": {
+                        "$or": [
+                            {"status": {"$ne": BatchStatus.COMPLETED.value}},
+                            {"files_collected": {"$ne": True}},
+                        ]
+                    }},
+                    {"$count": "bad"}
+                ],
+                "as": "bad_stats",
+            }},
+            {"$addFields": {
+                "matched_count": {"$ifNull": [{"$first": "$matched_stats.matched"}, 0]},
+                "bad_count": {"$ifNull": [{"$first": "$bad_stats.bad"}, 0]},
+                "batch_ids_size": {"$size": "$batch_ids"},
+            }},
+            {"$match": {
+                "$expr": {
+                    "$and": [
+                        {"$eq": ["$matched_count", "$batch_ids_size"]},
+                        {"$eq": ["$bad_count", 0]},
+                    ]
+                }
+            }},
+            {"$project": {
+                "matched_stats": 0,
+                "bad_stats": 0,
+                "matched_count": 0,
+                "bad_count": 0,
+                "batch_ids_size": 0,
+            }},
         ]
 
-        # Parse each aggregation result back into a BatchTask model
-        query = BatchTask.aggregate(pipeline, projection_model=BatchTask)
+        cursor = BatchTask.find(
+            BatchTask.status == BatchTaskStatus.RUNNING.value
+        ).aggregate(pipeline)
 
-        # Beanie's aggregation query supports async iteration over results
-        async for task in query:
-            yield task
+        async for doc in cursor:
+            yield BatchTask.model_validate(doc)

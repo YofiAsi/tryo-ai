@@ -24,9 +24,8 @@ class ManagerService:
         started_batches_ids = await self.batch_service.start_pending_batches()
         _log.info(f"Started {len(started_batches_ids)} batches: {started_batches_ids}")
     
-    async def check_on_batches_in_progress(self) -> None:
-        completed_batches_ids = await self.batch_service.check_on_batches_in_progress()
-        _log.info(f"Completed {len(completed_batches_ids)} batches: {completed_batches_ids}")
+    async def update_non_terminal_state_batches(self) -> None:
+        await self.batch_service.update_non_terminal_state_batches()
     
     async def check_and_complete_batch_tasks(self) -> None:
         completed_tasks_ids = await self.batch_task_service.check_and_complete_batch_tasks()

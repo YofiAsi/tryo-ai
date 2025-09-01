@@ -27,9 +27,57 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         _log.error(f"Failed to initialize database: {str(e)}")
         raise
     
+    # Initialize OpenAI clients
+    try:
+        from app.conf.dependencies import get_multi_key_openai_client
+        openai_client_service = get_multi_key_openai_client()
+        await openai_client_service.init_clients()
+        _log.info("OpenAI clients initialized successfully")
+    except Exception as e:
+        _log.error(f"Failed to initialize OpenAI clients: {str(e)}")
+        raise
+    
+    # Initialize and start batch download queue service
+    batch_download_queue = None
+    try:
+        from app.conf.dependencies import get_batch_download_queue_service
+        batch_download_queue = await get_batch_download_queue_service()
+        await batch_download_queue.start()
+        _log.info("Batch download queue service started successfully")
+    except Exception as e:
+        _log.error(f"Failed to start batch download queue service: {str(e)}")
+        # Don't raise here to allow the app to start even if queue fails
+        # This provides graceful degradation
+    
+    # Initialize and start batch scheduler
+    batch_scheduler = None
+    try:
+        from app.conf.dependencies import get_batch_scheduler_service
+        batch_scheduler = get_batch_scheduler_service()
+        await batch_scheduler.start()
+        _log.info("Batch scheduler started successfully")
+    except Exception as e:
+        _log.error(f"Failed to start batch scheduler: {str(e)}")
+        # Don't raise here to allow the app to start even if scheduler fails
+        # This provides graceful degradation
+    
     yield
     
     # Cleanup on shutdown
+    try:
+        if batch_download_queue and batch_download_queue.is_running:
+            await batch_download_queue.stop()
+            _log.info("Batch download queue service stopped")
+    except Exception as e:
+        _log.error(f"Error stopping batch download queue service: {str(e)}")
+    
+    try:
+        if batch_scheduler and batch_scheduler.is_running:
+            await batch_scheduler.stop()
+            _log.info("Batch scheduler stopped")
+    except Exception as e:
+        _log.error(f"Error stopping batch scheduler: {str(e)}")
+    
     try:
         await close_db_connection()
         _log.info("Database connections closed")

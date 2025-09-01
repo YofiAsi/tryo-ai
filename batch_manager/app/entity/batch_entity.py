@@ -26,22 +26,23 @@ class BatchStatus(str, Enum):
     CANCELLING = "cancelling"
     CANCELLED = "cancelled"
 
+    # in terminal state
+    TERMINAL_STATES = [COMPLETED, FAILED, EXPIRED, CANCELLED]
+
 
 class Batch(Document):
     """Entity representing an OpenAI Batch API batch"""
 
     id: PydanticObjectId = Field(default_factory=PydanticObjectId)
 
-    # AI model
     ai_model: AIModel
+    task_id: PydanticObjectId
+    files_collected: bool = Field(default=False)
 
     # OpenAI API key
     api_client_name: Optional[str] = Field(default=None)
     organization: Optional[str] = Field(default=None)
     project: Optional[str] = Field(default=None)
-
-    # Batch task
-    task_id: Optional[PydanticObjectId] = Field(default=None)
 
     # Estimated tokens
     estimated_tokens: int = Field(default=0)
@@ -141,6 +142,10 @@ class Batch(Document):
         self.expired_at = datetime.fromtimestamp(batch_dto.expired_at) if batch_dto.expired_at else None
         self.cancelling_at = datetime.fromtimestamp(batch_dto.cancelling_at) if batch_dto.cancelling_at else None
         self.cancelled_at = datetime.fromtimestamp(batch_dto.cancelled_at) if batch_dto.cancelled_at else None
+
+        self.input_file_id = batch_dto.input_file_id if batch_dto.input_file_id else None
+        self.output_file_id = batch_dto.output_file_id if batch_dto.output_file_id else None
+        self.error_file_id = batch_dto.error_file_id if batch_dto.error_file_id else None
 
         self.completed_requests = batch_dto.request_counts.completed if batch_dto.request_counts else 0
         self.failed_requests = batch_dto.request_counts.failed if batch_dto.request_counts else 0
