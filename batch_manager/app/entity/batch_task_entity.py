@@ -25,13 +25,13 @@ class BatchTaskStatus(str, Enum):
 class BatchTaskType(str, Enum):
     """BatchTask type values"""
 
-    CV_PROCESSING = "cv_processing"
+    CV_PARSING = "cv_parsing"
     EMBEDDING = "embedding"
     TOURNAMENT = "tournament"
 
 
 TypeToEndpoint: Dict[BatchTaskType, str] = {
-    BatchTaskType.CV_PROCESSING: "/v1/responses",
+    BatchTaskType.CV_PARSING: "/v1/responses",
     BatchTaskType.TOURNAMENT: "/v1/responses",
     BatchTaskType.EMBEDDING: "/v1/embeddings",
 }
