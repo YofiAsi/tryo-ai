@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class SeniorityLevel(str, Enum):
     JUNIOR = "Junior"
     MID = "Mid"
@@ -35,7 +36,7 @@ class TournamentCandidateStatus(str, Enum):
     INTERVIEWED = "interviewed"
 
 class TaskType(str, Enum):
-    CV_PROCESSING = "cv_processing"
+    CV_PARSING = "cv_parsing"
 
 class TaskStatus(str, Enum):
     PENDING = "pending"

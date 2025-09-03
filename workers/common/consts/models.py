@@ -1,7 +1,9 @@
-from typing import List, Optional
+from typing import Optional
+
 from pydantic import BaseModel
 
-from .enums import LanguageLevel, DegreeType
+from .enums import DegreeType, LanguageLevel
+
 
 class Language(BaseModel):
     name: str
