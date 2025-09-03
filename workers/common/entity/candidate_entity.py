@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Literal, Optional
 from uuid import UUID
 
-from beanie import Document, Insert, Replace, Update, before_event
+from beanie import Document, Insert, PydanticObjectId, Replace, Save, Update, before_event
 from pydantic import BaseModel, EmailStr, Field
 
 from common.consts.enums import CandidateStatus, DegreeType, SeniorityLevel, WorkArrangement
@@ -135,10 +135,12 @@ class ParsedCandidate(BaseModel):
         return f"Candidate: {self.name}, {self.title}"
 
 class ProcessingCandidate(Document):
+    id: PydanticObjectId = Field(default_factory=PydanticObjectId, alias="_id")
     file_id: UUID = Field(description="The ID of the file that the candidate is being processed from")
     original_cv_minio_path: str = Field(description="The path to the original CV in Minio")
     txt_cv_minio_path: str = Field(description="The path to the txt CV in Minio")
     parsed_data: Optional[ParsedCandidate] = Field(None, description="The parsed candidate data, populated after parsing")
+    parse_batch_task_id: Optional[str] = Field(None, description="The ID of the batch task that is parsing the candidate")
     status: Literal[
         "pending_parse",
         "parsing",
@@ -163,6 +165,12 @@ class ProcessingCandidate(Document):
     def before_update(self) -> None:
         """Automatically update the updated_at field before saving"""
         self.updated_at = datetime.now(timezone.utc)
+    
+    @before_event(Save)
+    def before_save(self) -> None:
+        """Automatically update the updated_at field before saving"""
+        self.updated_at = datetime.now(timezone.utc)
+        self.created_at = datetime.now(timezone.utc)
     
     def __str__(self) -> str:
         if self.parsed_data:

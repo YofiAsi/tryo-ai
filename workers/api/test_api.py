@@ -5,11 +5,40 @@ This FastAPI application provides REST endpoints to test the CV parse batch task
 It can be run in Docker and tested with Postman.
 """
 
-from typing import Any, Dict, List
+import logging
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Dict, List
 
 from common.conf.dependencies import get_cv_parse_batch_task_service
 from fastapi import FastAPI, Form, HTTPException
 from pydantic import BaseModel, Field
+
+_log = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+    """Handle application startup and shutdown events."""
+    _log.debug("FastAPI Workers Lifespan started")
+    
+    # Initialize database connection
+    try:
+        from common.conf.database import close_db_connection, init_db
+        await init_db()
+        _log.info("Database initialized successfully")
+    except Exception as e:
+        _log.error(f"Failed to initialize database: {str(e)}")
+        raise
+    
+    yield
+    
+    # Cleanup on shutdown
+    try:
+        await close_db_connection()
+        _log.info("Database connection closed")
+    except Exception as e:
+        _log.error(f"Error closing database connection: {str(e)}")
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -17,7 +46,8 @@ app = FastAPI(
     description="Test API for CreateCvParseBatchTaskService - Create and manage CV parsing batch tasks",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 # Initialize the service

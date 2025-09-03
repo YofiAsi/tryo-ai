@@ -9,7 +9,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Generator, List, Optional
 
 from minio import Minio
 from minio.error import S3Error
@@ -25,7 +25,8 @@ class MinIOSettings(BaseSettings):
     MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY") or ""
     MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY") or ""
     MINIO_SECURE: bool = os.getenv("MINIO_SECURE") == "true"
-    MINIO_CV_TXT_BUCKET: str = os.getenv("MINIO_CV_TXT_BUCKET") or "cv-txt-files"
+    MINIO_CANDIDATE_IMPORT_BUCKET: str = os.getenv("MINIO_CANDIDATE_IMPORT_BUCKET") or "candidate-import"
+    MINIO_CANDIDATE_FILES_BUCKET: str = os.getenv("MINIO_CANDIDATE_FILES_BUCKET") or "candidate-files"
     MINIO_REGION: str = os.getenv("MINIO_REGION") or ""
     
     class Config:
@@ -46,7 +47,7 @@ class FileInfo:
 
 
 class MinioRepository:
-    """Repository for handling MinIO operations with cv-txt-files bucket"""
+    """Repository for handling MinIO operations"""
     
     def __init__(self, settings: Optional[MinIOSettings] = None):
         """Initialize the MinIO repository
@@ -73,19 +74,25 @@ class MinioRepository:
         return self._client
     
     def _ensure_bucket_exists(self) -> None:
-        """Ensure the cv-txt-files bucket exists"""
-        try:
-            if not self.client.bucket_exists(self.settings.MINIO_CV_TXT_BUCKET):
-                self.client.make_bucket(self.settings.MINIO_CV_TXT_BUCKET, location=self.settings.MINIO_REGION)
-                _log.info(f"Created bucket: {self.settings.MINIO_CV_TXT_BUCKET}")
-            else:
-                _log.debug(f"Bucket exists: {self.settings.MINIO_CV_TXT_BUCKET}")
-        except S3Error as e:
-            _log.error(f"Error ensuring bucket exists: {e}")
-            raise
+        """Ensure all buckets exist"""
+        buckets = [
+            self.settings.MINIO_CANDIDATE_IMPORT_BUCKET,
+            self.settings.MINIO_CANDIDATE_FILES_BUCKET
+        ]
+        
+        for bucket_name in buckets:
+            try:
+                if not self.client.bucket_exists(bucket_name):
+                    self.client.make_bucket(bucket_name, location=self.settings.MINIO_REGION)
+                    _log.info(f"Created bucket: {bucket_name}")
+                else:
+                    _log.debug(f"Bucket exists: {bucket_name}")
+            except S3Error as e:
+                _log.error(f"Error ensuring bucket '{bucket_name}' exists: {e}")
+                raise
     
     def list_files_in_directory(self, directory: str) -> List[FileInfo]:
-        """List all files in a specific directory within the cv-txt-files bucket
+        """List all files in a specific directory within the candidate-import bucket
         
         Args:
             directory: Directory name (e.g., "test" will list files in /test/)
@@ -101,7 +108,7 @@ class MinioRepository:
             prefix = directory.rstrip('/') + '/' if directory else ''
             
             objects = self.client.list_objects(
-                bucket_name=self.settings.MINIO_CV_TXT_BUCKET,
+                bucket_name=self.settings.MINIO_CANDIDATE_IMPORT_BUCKET,
                 prefix=prefix,
                 recursive=True
             )
@@ -134,7 +141,7 @@ class MinioRepository:
             raise
     
     def download_file(self, object_name: str) -> bytes:
-        """Download a file from the cv-txt-files bucket
+        """Download a file from the candidate-import bucket
         
         Args:
             object_name: Object name in MinIO (full path including directory)
@@ -147,7 +154,7 @@ class MinioRepository:
         """
         try:
             response = self.client.get_object(
-                bucket_name=self.settings.MINIO_CV_TXT_BUCKET,
+                bucket_name=self.settings.MINIO_CANDIDATE_IMPORT_BUCKET,
                 object_name=object_name
             )
             
@@ -166,7 +173,7 @@ class MinioRepository:
             raise
     
     def download_file_to_path(self, object_name: str, file_path: str) -> str:
-        """Download a file from the cv-txt-files bucket to a local path
+        """Download a file from the candidate-import bucket to a local path
         
         Args:
             object_name: Object name in MinIO (full path including directory)
@@ -180,7 +187,7 @@ class MinioRepository:
         """
         try:
             self.client.fget_object(
-                bucket_name=self.settings.MINIO_CV_TXT_BUCKET,
+                bucket_name=self.settings.MINIO_CANDIDATE_IMPORT_BUCKET,
                 object_name=object_name,
                 file_path=file_path,
             )
@@ -196,7 +203,7 @@ class MinioRepository:
             raise
     
     def get_file_info(self, object_name: str) -> Optional[dict[str, Any]]:
-        """Get information about a file in the cv-txt-files bucket
+        """Get information about a file in the candidate-import bucket
         
         Args:
             object_name: Object name in MinIO
@@ -206,7 +213,7 @@ class MinioRepository:
         """
         try:
             stat = self.client.stat_object(
-                bucket_name=self.settings.MINIO_CV_TXT_BUCKET,
+                bucket_name=self.settings.MINIO_CANDIDATE_IMPORT_BUCKET,
                 object_name=object_name
             )
             
@@ -229,7 +236,7 @@ class MinioRepository:
             raise
     
     def file_exists(self, object_name: str) -> bool:
-        """Check if a file exists in the cv-txt-files bucket
+        """Check if a file exists in the candidate-import bucket
         
         Args:
             object_name: Object name in MinIO
@@ -239,7 +246,7 @@ class MinioRepository:
         """
         try:
             self.client.stat_object(
-                bucket_name=self.settings.MINIO_CV_TXT_BUCKET,
+                bucket_name=self.settings.MINIO_CANDIDATE_IMPORT_BUCKET,
                 object_name=object_name
             )
             return True
@@ -250,4 +257,49 @@ class MinioRepository:
             raise
         except Exception as e:
             _log.error(f"Unexpected error checking if file exists '{object_name}': {e}")
+            raise
+    
+    def iterate_files_in_directory(self, directory: str) -> Generator[FileInfo, None, None]:
+        """Iterate over files in a specific directory within the candidate-import bucket
+        
+        Args:
+            directory: Directory name (e.g., "test" will list files in /test/)
+            
+        Yields:
+            FileInfo objects for files in the directory
+            
+        Raises:
+            S3Error: If listing fails
+        """
+        try:
+            # Ensure directory has trailing slash for proper prefix matching
+            prefix = directory.rstrip('/') + '/' if directory else ''
+            
+            objects = self.client.list_objects(
+                bucket_name=self.settings.MINIO_CANDIDATE_IMPORT_BUCKET,
+                prefix=prefix,
+                recursive=True
+            )
+            
+            for obj in objects:
+                if obj.object_name is None:
+                    continue
+                    
+                # Skip directory entries (objects ending with /)
+                if obj.object_name.endswith('/'):
+                    continue
+                
+                yield FileInfo(
+                    object_name=obj.object_name,
+                    size=obj.size or 0,
+                    last_modified=obj.last_modified or datetime.now(),
+                    etag=obj.etag or "",
+                    content_type=None  # Not available in list_objects
+                )
+            
+        except S3Error as e:
+            _log.error(f"Failed to iterate files in directory '{directory}': {e}")
+            raise
+        except Exception as e:
+            _log.error(f"Unexpected error iterating files in directory '{directory}': {e}")
             raise

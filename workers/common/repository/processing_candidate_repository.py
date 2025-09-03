@@ -4,13 +4,16 @@ Repository for ProcessingCandidate operations with bulk update capabilities.
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Sequence, Union
-from uuid import UUID
+from typing import TYPE_CHECKING, List, Optional, Sequence
 
-from beanie import PydanticObjectId
 from beanie.odm.operators.find.comparison import In
 
 from common.entity.candidate_entity import ProcessingCandidate
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from beanie import PydanticObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +72,7 @@ class ProcessingCandidateRepository:
             logger.error(f"Failed to bulk create ProcessingCandidate documents: {e}")
             raise
     
-    async def update_status_bulk(self, candidate_ids: Sequence[Union[UUID, PydanticObjectId]], new_status: str) -> int:
+    async def update_status_bulk(self, candidate_ids: Sequence[PydanticObjectId], new_status: str) -> int:
         """
         Update status for multiple ProcessingCandidate documents efficiently.
         
@@ -83,34 +86,18 @@ class ProcessingCandidateRepository:
         Raises:
             Exception: If bulk update fails
         """
-        if not candidate_ids:
-            return 0
-        
         try:
-            # Import here to avoid circular imports
-            from common.entity.candidate_entity import ProcessingCandidate
-            
-            # Use Beanie's bulk update with proper operators
-            # Convert UUIDs to PydanticObjectIds if needed
-            object_ids = []
-            for cid in candidate_ids:
-                if cid is not None:
-                    if isinstance(cid, UUID):
-                        object_ids.append(PydanticObjectId(str(cid)))
-                    else:
-                        object_ids.append(cid)
-            
-            if not object_ids:
+            if not candidate_ids:
+                logger.warning("No candidate IDs provided for bulk update")
                 return 0
             
             
-            result = await ProcessingCandidate.find(
-                In(ProcessingCandidate.id, object_ids)
-            ).update({"status": new_status})
+            await ProcessingCandidate.find(
+                In(ProcessingCandidate.id, candidate_ids)
+            ).update_many({"$set": {"status": new_status}})
             
-            updated_count = result.modified_count if result else 0
-            logger.info(f"Bulk updated {updated_count} ProcessingCandidate statuses to '{new_status}'")
-            return updated_count
+            logger.info(f"Bulk updated {len(candidate_ids)} ProcessingCandidate statuses to '{new_status}'")
+            return len(candidate_ids)
             
         except Exception as e:
             logger.error(f"Failed to bulk update ProcessingCandidate statuses: {e}")
@@ -134,8 +121,51 @@ class ProcessingCandidateRepository:
         
         candidate_ids = [candidate.id for candidate in candidates if candidate.id]
         # Convert to list of PydanticObjectIds
-        object_ids = [PydanticObjectId(str(cid)) if isinstance(cid, UUID) else cid for cid in candidate_ids]
-        return await self.update_status_bulk(object_ids, "parsing")
+        return await self.update_status_bulk(candidate_ids, "parsing")
+    
+    async def update_batch_task_id_and_status(self, candidates: List[ProcessingCandidate], batch_task_id: str, status: str = "parsing") -> int:
+        """
+        Update multiple ProcessingCandidate documents with batch_task_id and status.
+        
+        Args:
+            candidates: List of ProcessingCandidate instances
+            batch_task_id: The batch task ID to assign
+            status: The status to set (defaults to 'parsing')
+            
+        Returns:
+            Number of documents updated
+            
+        Raises:
+            Exception: If bulk update fails
+        """
+        try:
+            if not candidates:
+                logger.warning("No candidates provided for batch update")
+                return 0
+            
+            candidate_ids = [candidate.id for candidate in candidates if candidate.id]
+            if not candidate_ids:
+                logger.warning("No candidate IDs found for batch update")
+                return 0
+            
+            # Update both status and batch_task_id
+            from beanie.odm.operators.find.comparison import In
+            
+            await ProcessingCandidate.find(
+                In(ProcessingCandidate.id, candidate_ids)
+            ).update_many({
+                "$set": {
+                    "status": status,
+                    "parse_batch_task_id": batch_task_id
+                }
+            })
+            
+            logger.info(f"Updated {len(candidate_ids)} candidates with batch_task_id: {batch_task_id} and status: {status}")
+            return len(candidate_ids)
+            
+        except Exception as e:
+            logger.error(f"Error updating candidates with batch_task_id and status: {e}")
+            raise
     
     async def find_by_status(self, status: str, limit: Optional[int] = None) -> List[ProcessingCandidate]:
         """

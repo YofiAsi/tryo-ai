@@ -100,9 +100,8 @@ class MinioDirectoryStructure(BaseModel):
             Corresponding path in the original directory
         """
         filename = Path(extracted_filepath).name
-        # Remove .txt extension and assume original file has same base name
-        base_name = Path(filename).stem
-        return self.get_original_file_path(base_name)
+
+        return self.get_original_file_path(filename)
     
     def get_corresponding_extracted_path(self, original_filepath: str) -> str:
         """

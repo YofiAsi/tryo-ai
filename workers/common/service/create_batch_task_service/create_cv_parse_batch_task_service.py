@@ -8,7 +8,7 @@ import logging
 import os
 import tempfile
 from typing import IO, TYPE_CHECKING, Any, List
-from uuid import uuid4
+from uuid import UUID
 
 from tqdm import tqdm
 
@@ -20,7 +20,7 @@ from common.service.create_batch_task_service.base_create_batch_task_service imp
 from common.utils.minio_directory_structure import MinioDirectoryStructure
 
 if TYPE_CHECKING:
-    from common.repository.minio_repository import FileInfo, MinioRepository
+    from common.repository.minio_repository import MinioRepository
     from common.repository.processing_candidate_repository import ProcessingCandidateRepository
     from common.service.batch_manager_client_service import BatchManagerClientService
 
@@ -53,7 +53,7 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
     ) -> List[str]:
         """
         Create multiple JSONL files for CV parsing tasks, split by task_size.
-        Creates ProcessingCandidate documents and sends files to batch manager.
+        Processes files incrementally, creating candidates, JSONL files, and sending batches as it goes.
         
         Args:
             minio_directory: Base directory path in MinIO bucket (e.g., "test")
@@ -74,125 +74,137 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
         # Initialize and validate directory structure
         dir_structure = self._initialize_directory_structure(minio_directory)
         
-        # Create ProcessingCandidate documents
-        processing_candidates = await self._create_processing_candidates(dir_structure)
-        
-        # Create and send JSONL files to batch manager
-        jsonl_files = self._create_jsonl_files(processing_candidates, task_size)
-        batch_task_ids = await self._send_jsonl_files_to_batch_manager(jsonl_files, minio_directory)
-        
-        # Clean up and update status
-        self._cleanup_temporary_files(jsonl_files)
-        await self._update_candidates_status_to_parsing(processing_candidates)
+        # Process files incrementally, creating batches as we go
+        batch_task_ids = await self._process_files_incrementally(dir_structure, task_size, minio_directory)
         
         logger.info(f"Successfully created {len(batch_task_ids)} batch tasks: {batch_task_ids}")
         return batch_task_ids
     
-    async def _create_processing_candidates(self, dir_structure: MinioDirectoryStructure) -> List[ProcessingCandidate]:
-        """Create ProcessingCandidate documents from extracted directory files."""
-        files = self._get_extracted_files(dir_structure)
-        processing_candidates = []
-        
-        for file_info in tqdm(files, desc="Creating ProcessingCandidate documents", unit="file"):
-            if not self._is_valid_text_file(file_info.object_name):
-                continue
-                
-            try:
-                content_str = self._download_and_validate_file_content(file_info.object_name)
-                if not content_str:
-                    continue
-                
-                processing_candidate = self._create_processing_candidate_document(
-                    file_info.object_name, dir_structure
-                )
-                
-                saved_candidate = await self.processing_candidate_repository.create_candidate(processing_candidate)
-                processing_candidates.append(saved_candidate)
-                
-                candidate_id = dir_structure.extract_candidate_id_from_filename(file_info.object_name)
-                logger.debug(f"Created ProcessingCandidate for {candidate_id}: {saved_candidate.id}")
-                
-            except Exception as e:
-                logger.error(f"Error processing file {file_info.object_name}: {e}")
-                continue
-        
-        logger.info(f"Created {len(processing_candidates)} ProcessingCandidate documents")
-        return processing_candidates
-    
-    def _get_extracted_files(self, dir_structure: MinioDirectoryStructure) -> List[FileInfo]:
-        """Get list of files from the extracted directory."""
-        try:
-            files = self.minio_repository.list_files_in_directory(dir_structure.extracted_directory)
-            logger.info(f"Found {len(files)} files in MinIO extracted directory: {dir_structure.extracted_directory}")
-            return files
-        except Exception as e:
-            logger.error(f"Error listing files from MinIO directory {dir_structure.extracted_directory}: {e}")
-            raise
-    
-    def _is_valid_text_file(self, object_name: str) -> bool:
-        """Check if the file is a valid text file."""
-        if not object_name.endswith('.txt'):
-            logger.debug(f"Skipping non-text file: {object_name}")
-            return False
-        return True
-    
-    def _download_and_validate_file_content(self, object_name: str) -> str:
-        """Download file content and validate it's not empty."""
-        content = self.minio_repository.download_file(object_name)
-        content_str = content.decode('utf-8').strip()
-        
-        if not content_str:
-            logger.warning(f"Empty file content for: {object_name}")
-            return ""
-        
-        return content_str
-    
-    def _create_processing_candidate_document(self, object_name: str, dir_structure: MinioDirectoryStructure) -> ProcessingCandidate:
-        """Create a ProcessingCandidate document from file information."""
-        original_path = dir_structure.get_corresponding_original_path(object_name)
-        
-        return ProcessingCandidate(
-            file_id=uuid4(),
-            original_cv_minio_path=original_path,
-            txt_cv_minio_path=object_name,
-            parsed_data=None,  # Will be populated after parsing
-            status="pending_parse",
-        )
-    
-    def _create_jsonl_files(self, processing_candidates: List[ProcessingCandidate], task_size: int) -> List[str]:
-        """Create multiple JSONL files for CV analysis from ProcessingCandidate documents, split by task_size."""
-        created_files = []
+    async def _process_files_incrementally(self, dir_structure: MinioDirectoryStructure, task_size: int, minio_directory: str) -> List[str]:
+        """Process files incrementally, creating candidates and JSONL files, sending batches when task_size is reached."""
+        batch_task_ids = []
+        current_batch_candidates = []
         current_file = None
         file_counter = 0
-        entries_in_current_file = 0
-        total_entries = 0
+        total_processed = 0
+        total_skipped = 0
         
         try:
-            for candidate in tqdm(processing_candidates, desc="Creating JSONL entries", unit="candidate"):
-                # Open new file if needed
-                if current_file is None:
-                    current_file, file_path = self._open_new_jsonl_file(file_counter)
-                    created_files.append(file_path)
-                    entries_in_current_file = 0
+            # Iterate over original files
+            for file_info in tqdm(
+                self.minio_repository.iterate_files_in_directory(dir_structure.original_directory),
+                desc="Processing candidates incrementally", 
+                unit="file"
+            ):
+                try:
+                    # Get file_id from original CV stem (filename without extension)
+                    file_id: UUID = UUID(dir_structure.extract_candidate_id_from_filename(file_info.object_name))
+                    
+                    # Check if corresponding extracted txt file exists
+                    extracted_file_path: str = dir_structure.get_extracted_file_path(f"{file_id}.txt")
+                    original_file_path: str = file_info.object_name
+                    
+                    if not self.minio_repository.file_exists(extracted_file_path):
+                        logger.debug(f"Skipping {file_id}: extracted file {extracted_file_path} does not exist")
+                        total_skipped += 1
+                        continue
+                    
+                    # Create and save ProcessingCandidate document
+                    processing_candidate = self._create_processing_candidate_document(
+                        file_id, extracted_file_path, original_file_path
+                    )
+                    
+                    # Open new JSONL file if needed
+                    if current_file is None:
+                        current_file, file_path = self._open_new_jsonl_file(file_counter)
+                    
+                    # Write JSONL entry for this candidate
+                    if self._write_jsonl_entry_for_candidate(current_file, processing_candidate):
+                        total_processed += 1
+                        current_batch_candidates.append(processing_candidate)
+                        
+                        logger.debug(f"Added candidate {file_id} to batch {file_counter}")
+                        
+                    # Check if we've reached task_size
+                    if len(current_batch_candidates) >= task_size:
+                        # Close current file and send batch
+                        current_file.close()
+                        
+                        # Send batch to batch manager
+                        batch_task_id = await self._send_single_jsonl_file_to_batch_manager(
+                            file_path, minio_directory
+                        )
+                        batch_task_ids.append(batch_task_id)
+                        
+                        await self.processing_candidate_repository.bulk_create_candidates(current_batch_candidates)
+
+                        # Update candidates with batch_task_id and status
+                        await self._update_candidates_batch_and_status(
+                            current_batch_candidates, batch_task_id
+                        )
+                        
+                        # Clean up temporary file
+                        self._cleanup_single_file(file_path)
+                        
+                        logger.info(
+                            f"Completed batch {file_counter} with {len(current_batch_candidates)} "
+                            f"candidates (batch_task_id: {batch_task_id})"
+                        )
+                        
+                        # Reset for next batch
+                        current_batch_candidates = []
+                        current_file = None
+                        file_counter += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error processing file {file_info.object_name}: {e}")
+                    total_skipped += 1
+                    continue
+            
+            # Handle remaining candidates in the last batch
+            if current_batch_candidates and current_file is not None:
+                current_file.close()
                 
-                # Create and write JSONL entry
-                if self._write_jsonl_entry_for_candidate(current_file, candidate):
-                    entries_in_current_file += 1
-                    total_entries += 1
+                # Send final batch to batch manager
+                batch_task_id = await self._send_single_jsonl_file_to_batch_manager(
+                    file_path, minio_directory
+                )
+                batch_task_ids.append(batch_task_id)
                 
-                # Close current file if we've reached task_size
-                if entries_in_current_file >= task_size:
-                    self._close_current_file(current_file, file_counter, entries_in_current_file)
-                    file_counter += 1
-                    entries_in_current_file = 0
+                # Update candidates with batch_task_id and status
+                await self._update_candidates_batch_and_status(
+                    current_batch_candidates, batch_task_id
+                )
+                
+                # Clean up temporary file
+                self._cleanup_single_file(file_path)
+                
+                logger.info(
+                    f"Completed final batch {file_counter} with {len(current_batch_candidates)} "
+                    f"candidates (batch_task_id: {batch_task_id})"
+                )
         
         finally:
-            # Close the last file if it's still open
+            # Ensure any open file is closed
             if current_file is not None:
-                self._close_current_file(current_file, file_counter, entries_in_current_file)
+                current_file.close()
         
-        logger.info(f"Created {len(created_files)} JSONL files with {total_entries} total entries")
-        return created_files
+        logger.info(
+            f"Processed {total_processed} candidates into {len(batch_task_ids)} batches, "
+            f"skipped {total_skipped} files"
+        )
+        return batch_task_ids
+    
+    def _create_processing_candidate_document(self, file_id: UUID, extracted_file_path: str, original_file_path: str) -> ProcessingCandidate:
+        """Create a ProcessingCandidate document from file information."""
+        
+        return ProcessingCandidate(
+            file_id=file_id,
+            original_cv_minio_path=original_file_path,
+            txt_cv_minio_path=extracted_file_path,
+            parsed_data=None,
+            status="pending_parse",
+        )
     
     def _open_new_jsonl_file(self, file_counter: int) -> tuple[IO[Any], str]:
         """Open a new JSONL file for writing."""
@@ -259,41 +271,38 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
         logger.info(f"Validated directory structure: {dir_structure}")
         return dir_structure
     
-    async def _send_jsonl_files_to_batch_manager(self, jsonl_files: List[str], minio_directory: str) -> List[str]:
-        """Send JSONL files to batch manager and return batch task IDs."""
-        batch_task_ids = []
-        
-        for jsonl_file_path in jsonl_files:
-            try:
-                logger.info(f"Sending JSONL file to batch manager: {jsonl_file_path}")
-                batch_response = await self.batch_manager_client.create_batch_task(
-                    task_type="cv_parsing",
-                    jsonl_file_path=jsonl_file_path,
-                    metadata={"minio_directory": minio_directory}
-                )
-                batch_task_ids.append(batch_response.id)
-                logger.info(f"Successfully created batch task: {batch_response.id}")
-            except Exception as e:
-                logger.error(f"Failed to create batch task for file {jsonl_file_path}: {e}")
-                raise
-        
-        return batch_task_ids
-    
-    def _cleanup_temporary_files(self, file_paths: List[str]) -> None:
-        """Clean up temporary JSONL files."""
-        for file_path in file_paths:
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    logger.debug(f"Removed temporary file: {file_path}")
-            except Exception as e:
-                logger.warning(f"Failed to remove temporary file {file_path}: {e}")
-    
-    async def _update_candidates_status_to_parsing(self, processing_candidates: List[ProcessingCandidate]) -> None:
-        """Update all ProcessingCandidate documents status to 'parsing'."""
+    async def _send_single_jsonl_file_to_batch_manager(self, jsonl_file_path: str, minio_directory: str) -> str:
+        """Send a single JSONL file to batch manager and return batch task ID."""
         try:
-            updated_count = await self.processing_candidate_repository.update_status_to_parsing(processing_candidates)
-            logger.info(f"Bulk updated {updated_count} candidates status to 'parsing'")
+            logger.info(f"Sending JSONL file to batch manager: {jsonl_file_path}")
+            batch_response = await self.batch_manager_client.create_batch_task(
+                task_type="cv_parsing",
+                jsonl_file_path=jsonl_file_path,
+                metadata={"minio_directory": minio_directory}
+            )
+            logger.info(f"Successfully created batch task: {batch_response.id}")
+            return batch_response.id
         except Exception as e:
-            logger.error(f"Error bulk updating candidate statuses to parsing: {e}")
+            logger.error(f"Failed to create batch task for file {jsonl_file_path}: {e}")
+            raise
+    
+    def _cleanup_single_file(self, file_path: str) -> None:
+        """Clean up a single temporary JSONL file."""
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.debug(f"Removed temporary file: {file_path}")
+        except Exception as e:
+            logger.warning(f"Failed to remove temporary file {file_path}: {e}")
+    
+    async def _update_candidates_batch_and_status(self, processing_candidates: List[ProcessingCandidate], batch_task_id: str) -> None:
+        """Update ProcessingCandidate documents with batch_task_id and status to 'parsing'."""
+        try:
+            updated_count = await self.processing_candidate_repository.update_batch_task_id_and_status(
+                processing_candidates, batch_task_id, "parsing"
+            )
+            logger.debug(f"Updated {updated_count} candidates with batch_task_id: {batch_task_id}")
+            
+        except Exception as e:
+            logger.error(f"Error updating candidates with batch_task_id and status: {e}")
             raise
