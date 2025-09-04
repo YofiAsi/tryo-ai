@@ -293,9 +293,15 @@ class BatchRepository:
         """
         Get terminal state batches iterator that do not have files collected.
         """
-        cursor = Batch.find({"status": {"$in": [
-            BatchStatus.TERMINAL_STATES.value
-        ]}, "files_collected": False}).sort("-completed_at")
+        cursor = Batch.find({
+            Batch.status: {
+                "$in": [
+                    BatchStatus.TERMINAL_STATES.value
+                ]},
+            Batch.files_collected: {
+                "$eq": False
+            }
+        }).sort("-completed_at")
         
         async for batch in cursor:
             yield batch

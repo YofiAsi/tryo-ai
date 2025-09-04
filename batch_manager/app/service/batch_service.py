@@ -264,7 +264,7 @@ class BatchService:
         except Exception as e:
             raise Exception(f"Failed to download batch error file for {batch.id}: {e}")
 
-    async def download_and_store_batch_files(self, batch: Batch) -> DownloadBatchFilesResponse:
+    async def download_and_store_batch_files(self, batch: Batch) -> Optional[DownloadBatchFilesResponse]:
         """
         Download batch results and store them in MinIO.
         Update batch with relevant stats.
@@ -275,7 +275,14 @@ class BatchService:
         Returns:
             DownloadBatchFilesResponse: Response containing the output and error file names
         """
+        if batch.files_collected:
+            return None
+
+        if not batch.is_terminal_state:
+            return None
+        
         _uploaded: bool = False
+
         if batch.output_file_id:
             output_file_content = await self.download_output_batch_file(batch)
             if not output_file_content:
@@ -345,6 +352,6 @@ class BatchService:
     async def update_non_terminal_state_batches(self) -> None:
         non_terminal_state_batches: AsyncIterator[Batch] = self.get_non_terminal_state_batches_iterator()
         async for batch in non_terminal_state_batches:
-            await self.update_batch(batch)
-            await self.download_and_store_batch_files(batch)
+            updated_batch = await self.update_batch(batch)
+            await self.download_and_store_batch_files(updated_batch)
         
