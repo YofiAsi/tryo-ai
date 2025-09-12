@@ -104,8 +104,7 @@ class CandidateService:
         
         # Create new candidate entity
         candidate = Candidate(
-            candidate_id=uuid.uuid4(),
-            status=Status.PENDING,
+            status=CandidateStatus.PENDING,
             name=candidate_data.name,
             gender=candidate_data.gender,
             year_of_birth=candidate_data.year_of_birth,
@@ -115,14 +114,6 @@ class CandidateService:
             phone=candidate_data.phone,
             title=candidate_data.title,
             seniority_level=candidate_data.seniority_level,
-            education=[],
-            work_experience=[],
-            certifications=[],
-            skills=None,
-            languages=None,
-            keywords=None,
-            links=Links(),
-            notes=Notes(),
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc)
         )
