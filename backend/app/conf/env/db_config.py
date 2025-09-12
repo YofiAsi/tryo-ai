@@ -1,29 +1,24 @@
 # Database Configuration
 import logging
+from typing import Any, Optional
 
 from beanie import init_beanie
-from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic_settings import BaseSettings
+from pymongo import AsyncMongoClient
 
 from app import entity
 
 log = logging.getLogger(__name__)
-client = None
+
+# Keep global handles if you need them elsewhere
+client: Optional[AsyncMongoClient[Any]] = None
 db = None
 
 
 class DatabaseSettings(BaseSettings):
     """
     Database settings
-
-    Attributes:
-    -----------
-    MONGODB_URI: str
-        MongoDB URI to connect to the database
-    DATABASE_NAME: str
-        Database name to connect to in MongoDB
     """
-
     MONGODB_URI: str | None = None
     DATABASE_NAME: str = "app"
     HOST: str = "localhost"
@@ -38,27 +33,62 @@ class DatabaseSettings(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = True
         extra = "ignore"
-        
 
 
-async def init_db():
+async def init_db() -> None:
     """
-    Load database settings from the environment variables
+    Initialize the database + Beanie with PyMongo's async client
     """
     log.info("Loading database settings")
-    mongodb_uri = ""
-    log.debug(f"DatabaseSettings().MONGODB_URI: {DatabaseSettings().MONGODB_URI}")
-    if DatabaseSettings().MONGODB_URI:
-        mongodb_uri = DatabaseSettings().MONGODB_URI
+    settings = DatabaseSettings()
+
+    # Build URI once
+    if settings.MONGODB_URI:
+        mongodb_uri = settings.MONGODB_URI
     else:
-        mongodb_uri = f"mongodb://{DatabaseSettings().HOST}:{DatabaseSettings().PORT}"
-        if DatabaseSettings().USERNAME and DatabaseSettings().PASSWORD:
-            mongodb_uri = f"mongodb://{DatabaseSettings().USERNAME}:{DatabaseSettings().PASSWORD}@{DatabaseSettings().HOST}:{DatabaseSettings().PORT}"
+        auth = ""
+        if settings.USERNAME and settings.PASSWORD:
+            auth = f"{settings.USERNAME}:{settings.PASSWORD}@"
+        mongodb_uri = f"mongodb://{auth}{settings.HOST}:{settings.PORT}"
 
-    log.debug(f"Database name: {DatabaseSettings().DATABASE_NAME}")
+    log.debug(f"Database name: {settings.DATABASE_NAME}")
     log.debug(f"mongodb_uri: {mongodb_uri}")
-    global client, db
-    client = AsyncIOMotorClient(mongodb_uri)
-    db = client[DatabaseSettings().DATABASE_NAME]
 
-    await init_beanie(database=db, document_models=[entity.User, entity.JobPosition, entity.Candidate, entity.Task, entity.ActivityLog])  # TODO change-me: add more entities here
+    global client, db
+    client = AsyncMongoClient[Any](mongodb_uri)
+    db = client[settings.DATABASE_NAME]
+
+    # Optional: verify connectivity early (uncomment if you want a startup check)
+    # await db.command("ping")
+
+    # Register your Beanie models
+    await init_beanie(
+        database=db,
+        document_models=[
+            entity.User,
+            entity.JobPosition,
+            entity.Candidate,
+            entity.Task,
+            entity.ActivityLog,
+        ],
+    )
+
+
+async def close_db_connection() -> None:
+    """
+    Close database connection
+    """
+    global client
+    if client:
+        # PyMongo async close() returns an awaitable; if your version changes,
+        # this pattern safely handles either case.
+        res = client.close()
+        try:
+            # If close() is awaitable, await it
+            import inspect
+            if inspect.isawaitable(res):
+                await res
+        except Exception:
+            # If not awaitable, it's already closed synchronously
+            pass
+        log.info("Database connection closed")
