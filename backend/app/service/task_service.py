@@ -68,7 +68,7 @@ class TaskService:
         # Create new task in database
         new_task = Task(
             task_id=uuid.uuid4(),
-            type=TaskType.CV_PROCESSING,
+            type=TaskType.CV_PARSING,
             status=TaskStatus.PENDING,
             progress_percentage=0.0,
             data=task_data,

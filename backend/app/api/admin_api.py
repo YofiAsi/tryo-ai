@@ -148,7 +148,7 @@ async def create_task(
         task_service: TaskService = Depends(get_task_service)) -> JSONResponse:
     _log.debug(f"BEGIN:create_task rest request")
     
-    if task_data.type.value == "cv_processing":
+    if task_data.type.value == "cv_parsing":
         created_task = await task_service.create_cv_processing_task(task_data.data)
     else:
         raise ValueError(f"Unsupported task type: {task_data.type}")
