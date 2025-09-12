@@ -281,20 +281,26 @@ class BatchService:
         if not batch.is_terminal_state:
             return None
         
+        if not batch.task_id:
+            raise ValueError(f"Batch {batch.id} has no task_id")
+        
+        # Get batch index within the batch task
+        batch_index = await self._get_batch_index_in_task(batch)
+        
         _uploaded: bool = False
 
         if batch.output_file_id:
             output_file_content = await self.download_output_batch_file(batch)
             if not output_file_content:
                 raise ValueError("Failed to download batch output file - batch may not be completed")
-            file_metadata = self.batch_file_storage_repository.store_batch_results(str(batch.id), output_file_content)
+            file_metadata = self.batch_file_storage_repository.store_batch_results(str(batch.task_id), batch_index, output_file_content)
             batch.db_output_file_name = file_metadata.minio_object_name
             _uploaded = True
         if batch.error_file_id:
             error_file_content = await self.download_error_batch_file(batch)
             if not error_file_content:
                 raise ValueError("Failed to download batch error file - batch may not be completed")
-            file_metadata = self.batch_file_storage_repository.store_batch_errors(str(batch.id), error_file_content)
+            file_metadata = self.batch_file_storage_repository.store_batch_errors(str(batch.task_id), batch_index, error_file_content)
             batch.db_error_file_name = file_metadata.minio_object_name
             _uploaded = True
         
@@ -328,6 +334,30 @@ class BatchService:
         Get non terminal state batches iterator.
         """
         return self.batch_repository.get_non_terminal_state_batches_iterator()
+
+    async def _get_batch_index_in_task(self, batch: Batch) -> int:
+        """
+        Get the index of a batch within its batch task.
+        
+        Args:
+            batch: Batch entity
+            
+        Returns:
+            int: Index of the batch within the batch task
+        """
+        if not batch.task_id:
+            raise ValueError(f"Batch {batch.id} has no task_id")
+        
+        # Get the batch task to find the batch index
+        batch_task = await self.batch_task_service.get_task_info(batch.task_id)
+        if not batch_task:
+            raise ValueError(f"Batch task {batch.task_id} not found")
+        
+        # Find the index of this batch in the batch task's batch_ids list
+        try:
+            return batch_task.batch_ids.index(batch.id)
+        except ValueError:
+            raise ValueError(f"Batch {batch.id} not found in batch task {batch.task_id}")
 
     async def _notify_batch_task_running(self, batch: Batch) -> None:
         if not batch.task_id:

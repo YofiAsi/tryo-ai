@@ -211,6 +211,25 @@ class BatchTaskCreateService:
             for batch_file_handler in batch_file_handlers:
                 self.batch_task.add_batch(batch_file_handler.entity)
 
+    def _get_batch_index_in_task(self, batch: Batch) -> int:
+        """
+        Get the index of a batch within its batch task.
+        
+        Args:
+            batch: Batch entity
+            
+        Returns:
+            int: Index of the batch within the batch task
+        """
+        if not self.batch_task:
+            raise BusinessException(ErrorCodes.INTERNAL_SERVER_ERROR, "BatchTask not initialized")
+        
+        # Find the index of this batch in the batch task's batch_ids list
+        try:
+            return self.batch_task.batch_ids.index(batch.id)
+        except ValueError:
+            raise ValueError(f"Batch {batch.id} not found in batch task {self.batch_task.id}")
+
     def _get_json_line_from_line(self, line: str) -> Dict[str, Any]:
         try:
             json_line: Dict[str, Any] = json.loads(line)
@@ -332,7 +351,11 @@ class BatchTaskCreateService:
         Raises:
             Exception: If upload fails
         """
+        if not self.batch_task:
+            raise BusinessException(ErrorCodes.INTERNAL_SERVER_ERROR, "BatchTask not initialized")
+        
         batch_id = str(batch_file_handler.entity.id)
+        batch_task_id = str(self.batch_task.id)
         file_path = str(batch_file_handler.file_path)
 
         try:
@@ -342,9 +365,15 @@ class BatchTaskCreateService:
             if not batch_file_handler.file_path.exists():
                 raise FileNotFoundError(f"Batch file not found: {file_path}")
 
+            # Get batch index within the batch task
+            batch_index = self._get_batch_index_in_task(batch_file_handler.entity)
+
             # Upload to file storage repository
             file_metadata = self.file_storage_repository.upload_batch_input_file(
-                batch_id=batch_id, file_data=file_path, content_type="application/jsonl"
+                batch_task_id=batch_task_id, 
+                batch_index=batch_index, 
+                file_data=file_path, 
+                content_type="application/jsonl"
             )
 
             _log.debug(f"Successfully uploaded batch file {batch_id}: {file_metadata.minio_object_name}")

@@ -28,7 +28,7 @@ class MinIOSettings(BaseSettings):
     MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY") or ""
     MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY") or ""
     MINIO_SECURE: bool = os.getenv("MINIO_SECURE") == "true"
-    MINIO_BATCH_BUCKET: str = os.getenv("MINIO_BATCH_BUCKET") or ""
+    MINIO_BATCH_TASKS_BUCKET: str = os.getenv("MINIO_BATCH_TASKS_BUCKET") or ""
     MINIO_REGION: str = os.getenv("MINIO_REGION") or ""
     
     class Config:
@@ -78,40 +78,51 @@ class FileStorageRepository:
     def _ensure_bucket_exists(self) -> None:
         """Ensure the batch files bucket exists"""
         try:
-            if not self.client.bucket_exists(self.settings.MINIO_BATCH_BUCKET):
-                self.client.make_bucket(self.settings.MINIO_BATCH_BUCKET, location=self.settings.MINIO_REGION)
-                _log.info(f"Created bucket: {self.settings.MINIO_BATCH_BUCKET}")
+            if not self.client.bucket_exists(self.settings.MINIO_BATCH_TASKS_BUCKET):
+                self.client.make_bucket(self.settings.MINIO_BATCH_TASKS_BUCKET, location=self.settings.MINIO_REGION)
+                _log.info(f"Created bucket: {self.settings.MINIO_BATCH_TASKS_BUCKET}")
             else:
-                _log.debug(f"Bucket exists: {self.settings.MINIO_BATCH_BUCKET}")
+                _log.debug(f"Bucket exists: {self.settings.MINIO_BATCH_TASKS_BUCKET}")
         except S3Error as e:
             _log.error(f"Error ensuring bucket exists: {e}")
             raise
     
-    def _generate_object_name(self, batch_id: str, file_type: str, file_extension: str = "jsonl") -> str:
+    def _generate_object_name(self, batch_task_id: str, file_type: str, batch_index: int = 0, file_extension: str = "jsonl") -> str:
         """Generate a unique object name for the file
         
         Args:
-            batch_id: The batch identifier
+            batch_task_id: The batch task identifier
             file_type: Type of file ('input', 'output', 'error')
+            batch_index: Index of the batch within the batch task (for naming batch_i.jsonl)
             file_extension: File extension (default: 'jsonl')
             
         Returns:
             Generated object name
         """
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
-        return f"{batch_id}/{file_type}/{timestamp}_{unique_id}.{file_extension}"
+        if file_type == "input":
+            return f"{batch_task_id}/input/batch_{batch_index}.{file_extension}"
+        elif file_type == "output":
+            return f"{batch_task_id}/output/result_batch_{batch_index}.{file_extension}"
+        elif file_type == "error":
+            return f"{batch_task_id}/output/error_batch_{batch_index}.{file_extension}"
+        else:
+            # Fallback for other file types
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+            return f"{batch_task_id}/{file_type}/{timestamp}_{unique_id}.{file_extension}"
     
     def upload_batch_input_file(
         self,
-        batch_id: str,
+        batch_task_id: str,
+        batch_index: int,
         file_data: Union[bytes, BinaryIO, str],
         content_type: str = "application/jsonl"
     ) -> FileMetadata:
         """Upload a batch input file to MinIO
         
         Args:
-            batch_id: Unique identifier for the batch
+            batch_task_id: Unique identifier for the batch task
+            batch_index: Index of the batch within the batch task
             file_data: File data as bytes, file-like object, or file path
             content_type: MIME type of the file
             
@@ -121,7 +132,7 @@ class FileStorageRepository:
         Raises:
             S3Error: If upload fails
         """
-        object_name = self._generate_object_name(batch_id, "input", "jsonl")
+        object_name = self._generate_object_name(batch_task_id, "input", batch_index, "jsonl")
         
         try:
             # Handle different input types
@@ -133,7 +144,7 @@ class FileStorageRepository:
                 
                 file_size = file_path.stat().st_size
                 self.client.fput_object(
-                    bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                    bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                     object_name=object_name,
                     file_path=str(file_path),
                     content_type=content_type
@@ -144,7 +155,7 @@ class FileStorageRepository:
                 file_size = len(file_data)
                 data_stream = io.BytesIO(file_data)
                 self.client.put_object(
-                    bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                    bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                     object_name=object_name,
                     data=data_stream,
                     length=file_size,
@@ -158,7 +169,7 @@ class FileStorageRepository:
                 file_data.seek(0)  # Reset to beginning
                 
                 self.client.put_object(
-                    bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                    bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                     object_name=object_name,
                     data=file_data,
                     length=file_size,
@@ -170,7 +181,7 @@ class FileStorageRepository:
             return FileMetadata(
                 content_type=content_type,
                 size=file_size,
-                batch_id=batch_id,
+                batch_id=batch_task_id,
                 file_type="input",
                 created_at=datetime.now(timezone.utc),
                 minio_object_name=object_name
@@ -201,7 +212,7 @@ class FileStorageRepository:
         """
         try:
             self.client.fget_object(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 object_name=object_name,
                 file_path=tmp_file_path,
             )
@@ -233,7 +244,7 @@ class FileStorageRepository:
         """
         try:
             response = self.client.get_object(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 object_name=object_name
             )
             
@@ -268,7 +279,7 @@ class FileStorageRepository:
         """
         try:
             response = self.client.get_object(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 object_name=object_name
             )
             
@@ -288,14 +299,16 @@ class FileStorageRepository:
     
     def store_batch_results(
         self,
-        batch_id: str,
+        batch_task_id: str,
+        batch_index: int,
         results_data: bytes,
         content_type: str = "application/jsonl"
     ) -> FileMetadata:
         """Store batch processing results in MinIO
         
         Args:
-            batch_id: Unique identifier for the batch
+            batch_task_id: Unique identifier for the batch task
+            batch_index: Index of the batch within the batch task
             results_data: Results data as bytes
             content_type: MIME type of the results
             
@@ -305,14 +318,14 @@ class FileStorageRepository:
         Raises:
             S3Error: If storage fails
         """
-        object_name = self._generate_object_name(batch_id, "output", "jsonl")
+        object_name = self._generate_object_name(batch_task_id, "output", batch_index, "jsonl")
         
         try:
             data_stream = io.BytesIO(results_data)
             file_size = len(results_data)
             
             self.client.put_object(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 object_name=object_name,
                 data=data_stream,
                 length=file_size,
@@ -324,7 +337,7 @@ class FileStorageRepository:
             return FileMetadata(
                 content_type=content_type,
                 size=file_size,
-                batch_id=batch_id,
+                batch_id=batch_task_id,
                 file_type="output",
                 created_at=datetime.now(timezone.utc),
                 minio_object_name=object_name
@@ -339,14 +352,16 @@ class FileStorageRepository:
     
     def store_batch_errors(
         self,
-        batch_id: str,
+        batch_task_id: str,
+        batch_index: int,
         error_data: bytes,
         content_type: str = "application/jsonl"
     ) -> FileMetadata:
         """Store batch processing errors in MinIO
         
         Args:
-            batch_id: Unique identifier for the batch
+            batch_task_id: Unique identifier for the batch task
+            batch_index: Index of the batch within the batch task
             error_data: Error data as bytes
             content_type: MIME type of the error data
             
@@ -356,14 +371,14 @@ class FileStorageRepository:
         Raises:
             S3Error: If storage fails
         """
-        object_name = self._generate_object_name(batch_id, "error", "jsonl")
+        object_name = self._generate_object_name(batch_task_id, "error", batch_index, "jsonl")
         
         try:
             data_stream = io.BytesIO(error_data)
             file_size = len(error_data)
             
             self.client.put_object(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 object_name=object_name,
                 data=data_stream,
                 length=file_size,
@@ -375,7 +390,7 @@ class FileStorageRepository:
             return FileMetadata(
                 content_type=content_type,
                 size=file_size,
-                batch_id=batch_id,
+                batch_id=batch_task_id,
                 file_type="error",
                 created_at=datetime.now(timezone.utc),
                 minio_object_name=object_name
@@ -399,7 +414,7 @@ class FileStorageRepository:
         """
         try:
             self.client.remove_object(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 object_name=object_name
             )
             
@@ -413,20 +428,20 @@ class FileStorageRepository:
             _log.error(f"Unexpected error deleting file {object_name}: {e}")
             return False
     
-    def cleanup_batch_files(self, batch_id: str) -> bool:
-        """Clean up all files associated with a batch
+    def cleanup_batch_task_files(self, batch_task_id: str) -> bool:
+        """Clean up all files associated with a batch task
         
         Args:
-            batch_id: Unique identifier for the batch
+            batch_task_id: Unique identifier for the batch task
             
         Returns:
             True if cleanup was successful, False otherwise
         """
         try:
-            # List all objects with the batch prefix
-            prefix = f"{batch_id}/"
+            # List all objects with the batch task prefix
+            prefix = f"{batch_task_id}/"
             objects = self.client.list_objects(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 prefix=prefix,
                 recursive=True
             )
@@ -437,21 +452,21 @@ class FileStorageRepository:
                     continue
                 try:
                     self.client.remove_object(
-                        bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                        bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                         object_name=obj.object_name
                     )
                     deleted_count += 1
                 except S3Error as e:
                     _log.warning(f"Failed to delete {obj.object_name}: {e}")
             
-            _log.info(f"Cleaned up {deleted_count} files for batch {batch_id}")
+            _log.info(f"Cleaned up {deleted_count} files for batch task {batch_task_id}")
             return True
             
         except S3Error as e:
-            _log.error(f"Failed to cleanup batch files for {batch_id}: {e}")
+            _log.error(f"Failed to cleanup batch task files for {batch_task_id}: {e}")
             return False
         except Exception as e:
-            _log.error(f"Unexpected error cleaning up batch files for {batch_id}: {e}")
+            _log.error(f"Unexpected error cleaning up batch task files for {batch_task_id}: {e}")
             return False
     
     def get_file_info(self, object_name: str) -> Optional[dict[str, Any]]:
@@ -465,7 +480,7 @@ class FileStorageRepository:
         """
         try:
             stat = self.client.stat_object(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 object_name=object_name
             )
             
@@ -487,19 +502,19 @@ class FileStorageRepository:
             _log.error(f"Unexpected error getting file info for {object_name}: {e}")
             raise
     
-    def list_batch_files(self, batch_id: str) -> list[dict[str, Any]]:
-        """List all files associated with a batch
+    def list_batch_task_files(self, batch_task_id: str) -> list[dict[str, Any]]:
+        """List all files associated with a batch task
         
         Args:
-            batch_id: Unique identifier for the batch
+            batch_task_id: Unique identifier for the batch task
             
         Returns:
             List of dictionaries with file information
         """
         try:
-            prefix = f"{batch_id}/"
+            prefix = f"{batch_task_id}/"
             objects = self.client.list_objects(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 prefix=prefix,
                 recursive=True
             )
@@ -513,14 +528,14 @@ class FileStorageRepository:
                     "etag": obj.etag
                 })
             
-            _log.debug(f"Found {len(files)} files for batch {batch_id}")
+            _log.debug(f"Found {len(files)} files for batch task {batch_task_id}")
             return files
             
         except S3Error as e:
-            _log.error(f"Failed to list batch files for {batch_id}: {e}")
+            _log.error(f"Failed to list batch task files for {batch_task_id}: {e}")
             raise
         except Exception as e:
-            _log.error(f"Unexpected error listing batch files for {batch_id}: {e}")
+            _log.error(f"Unexpected error listing batch task files for {batch_task_id}: {e}")
             raise
     
     def get_presigned_download_url(
@@ -542,7 +557,7 @@ class FileStorageRepository:
         """
         try:
             url = self.client.presigned_get_object(
-                bucket_name=self.settings.MINIO_BATCH_BUCKET,
+                bucket_name=self.settings.MINIO_BATCH_TASKS_BUCKET,
                 object_name=object_name,
                 expires=timedelta(seconds=expires_in_seconds)
             )
