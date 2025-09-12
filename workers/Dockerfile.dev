@@ -29,11 +29,12 @@ ENV PYTHONFAULTHANDLER=1
 # Expose ports
 # 8002: FastAPI application port
 # 5679: Debugpy debug port
-EXPOSE 8002 5679
+EXPOSE 5679 5679
+EXPOSE 8002 8002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8002/health || exit 1
 
 # Run the server (debugpy is handled internally by server.py)
-CMD ["python", "server.py"]
+CMD ["python", "main.py"]

@@ -4,19 +4,25 @@ Repository for ProcessingCandidate operations with bulk update capabilities.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Optional, Sequence
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Sequence
 
+from beanie import PydanticObjectId
 from beanie.odm.operators.find.comparison import In
 
-from common.entity.candidate_entity import ProcessingCandidate
+from common.entity.candidate_entity import ParsedCandidate, ProcessingCandidate
 
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from beanie import PydanticObjectId
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class ParsedDataUpdate:
+    status: Optional[str] = None
+    parsed_data: Optional[ParsedCandidate] = None
+    errors: List[str] = field(default_factory=list)
 
 class ProcessingCandidateRepository:
     """Repository for managing ProcessingCandidate documents with bulk operations."""
@@ -167,33 +173,64 @@ class ProcessingCandidateRepository:
             logger.error(f"Error updating candidates with batch_task_id and status: {e}")
             raise
     
-    async def find_by_status(self, status: str, limit: Optional[int] = None) -> List[ProcessingCandidate]:
+
+    async def cleanup_corrupted_errors_field(self) -> int:
         """
-        Find ProcessingCandidate documents by status.
+        Clean up documents that have aggregation expressions in their errors field.
+        This fixes documents that were corrupted by incorrect bulk update operations.
+        
+        Returns:
+            Number of documents cleaned up
+        """
+        try:
+            # Find documents with corrupted errors field (containing aggregation expressions)
+            corrupted_docs = await ProcessingCandidate.find(
+                {"errors": {"$type": "object"}}  # errors field is an object instead of array
+            ).to_list()
+            
+            cleaned_count = 0
+            for doc in corrupted_docs:
+                # Reset errors to empty array if it's corrupted
+                if isinstance(doc.errors, dict):
+                    doc.errors = []
+                    await doc.save()
+                    cleaned_count += 1
+                    logger.debug(f"Cleaned up corrupted errors field for document {doc.id}")
+            
+            if cleaned_count > 0:
+                logger.info(f"Cleaned up {cleaned_count} documents with corrupted errors field")
+            
+            return cleaned_count
+            
+        except Exception as e:
+            logger.error(f"Failed to cleanup corrupted errors field: {e}")
+            raise
+
+    async def find_by_status_iterator(self, status: str) -> AsyncIterator[ProcessingCandidate]:
+        """
+        Find ProcessingCandidate documents by status using an iterator.
         
         Args:
             status: Status to filter by
-            limit: Optional limit on number of results
             
-        Returns:
-            List of ProcessingCandidate documents
+        Yields:
+            ProcessingCandidate documents one at a time
             
         Raises:
             Exception: If query fails
         """
         try:
-            from common.entity.candidate_entity import ProcessingCandidate
+            # First, clean up any corrupted documents
+            await self.cleanup_corrupted_errors_field()
             
             query = ProcessingCandidate.find(ProcessingCandidate.status == status)
-            if limit:
-                query = query.limit(limit)
             
-            candidates = await query.to_list()
-            logger.debug(f"Found {len(candidates)} ProcessingCandidate documents with status '{status}'")
-            return candidates
-            
+            # Process in batches to avoid loading all documents into memory
+            async for candidate in query:
+                yield candidate
+                
         except Exception as e:
-            logger.error(f"Failed to find ProcessingCandidate documents by status '{status}': {e}")
+            logger.error(f"Failed to iterate ProcessingCandidate documents by status '{status}': {e}")
             raise
     
     async def find_by_file_id(self, file_id: UUID) -> Optional[ProcessingCandidate]:
@@ -210,8 +247,6 @@ class ProcessingCandidateRepository:
             Exception: If query fails
         """
         try:
-            from common.entity.candidate_entity import ProcessingCandidate
-            
             candidate = await ProcessingCandidate.find_one(ProcessingCandidate.file_id == file_id)
             if candidate:
                 logger.debug(f"Found ProcessingCandidate for file_id: {file_id}")
@@ -259,8 +294,6 @@ class ProcessingCandidateRepository:
             Exception: If deletion fails
         """
         try:
-            from common.entity.candidate_entity import ProcessingCandidate
-            
             result = await ProcessingCandidate.find(ProcessingCandidate.status == status).delete()
             deleted_count = result.deleted_count if result else 0
             logger.info(f"Deleted {deleted_count} ProcessingCandidate documents with status '{status}'")
@@ -268,4 +301,89 @@ class ProcessingCandidateRepository:
             
         except Exception as e:
             logger.error(f"Failed to delete ProcessingCandidate documents by status '{status}': {e}")
+            raise
+
+    async def bulk_update(self, candidates: List[ProcessingCandidate]) -> List[ProcessingCandidate]:
+        """
+        Bulk update ProcessingCandidate documents.
+        
+        Args:
+            candidates: List of ProcessingCandidate instances
+            
+        Returns:
+            List of updated ProcessingCandidate instances
+
+        Raises:
+            Exception: If bulk update fails
+        """
+        if not candidates:
+            return []
+        
+        try:
+            await ProcessingCandidate.replace_many(candidates)
+            return candidates
+        except Exception as e:
+            logger.error(f"Failed to bulk update ProcessingCandidate documents: {e}")
+            raise
+    
+    async def add_parsed_data_to_candidates(self, data: Dict[str, ParsedDataUpdate]) -> None:
+        """
+        Add parsed data to ProcessingCandidate documents.
+        
+        Args:
+            data: Dictionary mapping candidate IDs to ParsedDataUpdate instances
+            
+        Returns:
+            None
+            
+        Raises:
+            Exception: If bulk update fails
+        """
+        if not data:
+            logger.warning("No data provided for bulk update")
+            return None
+
+        try:
+            updated_count = 0
+            failed_updates = []
+            
+            async with ProcessingCandidate.bulk_writer(ordered=False) as bw:
+                for _id, parsed_data_update in data.items():
+                    try:
+                        object_id = PydanticObjectId(_id)
+
+                        # Prepare the update document
+                        update_doc: Dict[str, Dict[str, Any]] = {
+                            "$set": {
+                                "parsed_data": parsed_data_update.parsed_data.model_dump() if parsed_data_update.parsed_data else None,
+                                "status": parsed_data_update.status,
+                            }
+                        }
+                        
+                        # Only add errors concatenation if there are errors to add
+                        if parsed_data_update.errors:
+                            # First get the current document to append errors
+                            current_doc = await ProcessingCandidate.find_one(ProcessingCandidate.id == object_id)
+                            current_errors: List[str] = current_doc.errors if current_doc and current_doc.errors else []
+                            update_doc["$set"]["errors"] = current_errors + parsed_data_update.errors
+                        
+                        # Perform the update
+                        await ProcessingCandidate.find_one(
+                            ProcessingCandidate.id == object_id
+                        ).update(update_doc, bulk_writer=bw)
+                            
+                    except Exception as e:
+                        logger.error(f"Failed to queue update for candidate {_id}: {e}")
+                        failed_updates.append(_id)
+                        continue
+            
+            # Log results
+            logger.info(f"Bulk update completed: {updated_count} candidates queued for update")
+            if failed_updates:
+                logger.warning(f"Failed to update {len(failed_updates)} candidates: {failed_updates}")
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to perform bulk update of parsed data: {e}")
             raise

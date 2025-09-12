@@ -131,12 +131,12 @@ class MinioDirectoryStructure(BaseModel):
         """
         try:
             # Check if original directory exists and has files
-            original_files = minio_repository.list_files_in_directory(self.original_directory)
+            original_files = minio_repository.list_files_in_import_directory(self.original_directory)
             if not original_files:
                 raise ValueError(f"Original directory '{self.original_directory}' is empty or doesn't exist")
             
             # Check if extracted directory exists and has files
-            extracted_files = minio_repository.list_files_in_directory(self.extracted_directory)
+            extracted_files = minio_repository.list_files_in_import_directory(self.extracted_directory)
             if not extracted_files:
                 raise ValueError(f"Extracted directory '{self.extracted_directory}' is empty or doesn't exist")
             

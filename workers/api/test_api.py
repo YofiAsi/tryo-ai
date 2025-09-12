@@ -1,57 +1,34 @@
 """
 Test API for CreateCvParseBatchTaskService.
 
-This FastAPI application provides REST endpoints to test the CV parse batch task service.
+This module provides REST endpoints to test the CV parse batch task service.
 It can be run in Docker and tested with Postman.
 """
 
 import logging
-from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Dict, List
+from typing import Any, Dict, List
 
-from common.conf.dependencies import get_cv_parse_batch_task_service
-from fastapi import FastAPI, Form, HTTPException
+from common.conf.dependencies import (
+    get_candidate_finalization_service,
+    get_cv_parse_batch_task_service,
+    get_cv_parse_results_processor_service,
+    get_embed_results_processor_service,
+    get_embed_task_service,
+)
+from fastapi import APIRouter, Form, HTTPException
 from pydantic import BaseModel, Field
 
 _log = logging.getLogger(__name__)
 
+# Create API router
+router = APIRouter()
 
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
-    """Handle application startup and shutdown events."""
-    _log.debug("FastAPI Workers Lifespan started")
-    
-    # Initialize database connection
-    try:
-        from common.conf.database import close_db_connection, init_db
-        await init_db()
-        _log.info("Database initialized successfully")
-    except Exception as e:
-        _log.error(f"Failed to initialize database: {str(e)}")
-        raise
-    
-    yield
-    
-    # Cleanup on shutdown
-    try:
-        await close_db_connection()
-        _log.info("Database connection closed")
-    except Exception as e:
-        _log.error(f"Error closing database connection: {str(e)}")
-
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="CV Parse Batch Task Service Test API",
-    description="Test API for CreateCvParseBatchTaskService - Create and manage CV parsing batch tasks",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan
-)
-
-# Initialize the service
+# Initialize the services
 cv_parse_service = get_cv_parse_batch_task_service()
+cv_parse_results_service = get_cv_parse_results_processor_service()
+embed_task_service = get_embed_task_service()
+embed_results_service = get_embed_results_processor_service()
+candidate_finalization_service = get_candidate_finalization_service()
 
 # Global storage for test data (in production, use proper database)
 test_data_storage: Dict[str, Any] = {
@@ -90,16 +67,40 @@ class DatabaseInfo(BaseModel):
     length_range: Dict[str, int]
 
 
-@app.get("/health")
+class ProcessResultsRequest(BaseModel):
+    """Request model for processing batch results."""
+    minio_directory: str = Field(..., description="Directory path in MinIO containing result files")
+    bucket_name: str = Field(..., description="MinIO bucket name containing the result files")
+
+
+class ProcessResultsResponse(BaseModel):
+    """Response model for processed batch results."""
+    success: bool
+    message: str
+    total_lines_processed: int
+    successful_updates: int
+    failed_updates: int
+
+
+class FinalizationResponse(BaseModel):
+    """Response model for candidate finalization."""
+    success: bool
+    message: str
+    total_processed: int
+    successful_finalizations: int
+    failed_finalizations: int
+
+
+@router.get("/health")
 async def health_check() -> Dict[str, Any]:
     """Health check endpoint."""
     return {"status": "healthy", "service": "cv-parse-batch-task-test-api"}
 
 
-@app.post("/create-tasks", response_model=CreateTasksResponse)
+@router.post("/create-tasks", response_model=CreateTasksResponse)
 async def create_batch_tasks(
     minio_directory: str = Form(...),
-    task_size: int = Form(..., ge=1, le=1000),
+    task_size: int = Form(..., ge=1),
 ) -> CreateTasksResponse:
     """
     Create batch tasks from uploaded CV files.
@@ -125,6 +126,118 @@ async def create_batch_tasks(
         raise HTTPException(status_code=500, detail=f"Task creation failed: {str(e)}")
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@router.post("/process-results", response_model=ProcessResultsResponse)
+async def process_batch_results(
+    minio_directory: str = Form(...),
+    bucket_name: str = Form(...),
+) -> ProcessResultsResponse:
+    """
+    Process batch task results from MinIO JSONL files.
+    
+    This endpoint uses the CvParseResultsProcessorService to process JSONL result files
+    and update ProcessingCandidate documents with parsed data.
+    """
+    
+    try:
+        # Process batch results using the service
+        stats = await cv_parse_results_service.process_results(
+            minio_directory=minio_directory,
+            bucket_name=bucket_name
+        )
+        
+        return ProcessResultsResponse(
+            success=True,
+            message=f"Successfully processed {stats.total_lines_processed} result lines",
+            total_lines_processed=stats.total_lines_processed,
+            successful_updates=stats.successful_updates,
+            failed_updates=stats.failed_updates,
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Results processing failed: {str(e)}")
+
+
+@router.post("/create-embed-tasks", response_model=CreateTasksResponse)
+async def create_embed_tasks(
+    task_size: int = Form(..., ge=1, le=50000),
+) -> CreateTasksResponse:
+    """
+    Create embedding batch tasks from candidates ready for vectorization.
+    
+    This endpoint uses the CreateEmbedTaskService to generate JSONL files
+    for embedding tasks and send them to the batch manager for processing.
+    """
+    
+    try:
+        # Create embedding batch tasks using the service
+        batch_task_ids = await embed_task_service.create_tasks(
+            task_size=task_size,
+        )
+        
+        return CreateTasksResponse(
+            success=True,
+            message=f"Successfully created {len(batch_task_ids)} embedding batch tasks",
+            batch_task_ids=batch_task_ids,
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Embedding task creation failed: {str(e)}")
+
+
+@router.post("/process-embed-results", response_model=ProcessResultsResponse)
+async def process_embed_results(
+    minio_directory: str = Form(...),
+    bucket_name: str = Form(...),
+) -> ProcessResultsResponse:
+    """
+    Process embedding batch task results from MinIO JSONL files.
+    
+    This endpoint uses the EmbedResultsProcessorService to process JSONL result files
+    and update ProcessingCandidate documents with embedding vectors.
+    """
+    
+    try:
+        # Process embedding batch results using the service
+        stats = await embed_results_service.process_results(
+            minio_directory=minio_directory,
+            bucket_name=bucket_name
+        )
+        
+        return ProcessResultsResponse(
+            success=True,
+            message=f"Successfully processed {stats.total_lines_processed} embedding result lines",
+            total_lines_processed=stats.total_lines_processed,
+            successful_updates=stats.successful_updates,
+            failed_updates=stats.failed_updates,
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Embedding results processing failed: {str(e)}")
+
+
+@router.post("/finalize-candidates", response_model=FinalizationResponse)
+async def finalize_candidates() -> FinalizationResponse:
+    """
+    Finalize candidates that are ready for finalization.
+    
+    This endpoint uses the CandidateFinalizationService to process candidates
+    with 'pending_finalization' status, create CandidateDocument instances,
+    and update ProcessingCandidate statuses to 'completed'.
+    """
+    
+    try:
+        # Finalize candidates using the service
+        stats = await candidate_finalization_service.finalize_candidates()
+        
+        return FinalizationResponse(
+            success=True,
+            message=f"Successfully finalized {stats.successful_finalizations} candidates",
+            total_processed=stats.total_processed,
+            successful_finalizations=stats.successful_finalizations,
+            failed_finalizations=stats.failed_finalizations,
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Candidate finalization failed: {str(e)}")
+
+

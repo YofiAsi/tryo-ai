@@ -24,11 +24,6 @@ class BaseCreateBatchTaskService(ABC):
     @abstractmethod
     def endpoint(self) -> str:
         pass
-
-    @property
-    @abstractmethod
-    def model(self) -> str:
-        pass
     
     @abstractmethod
     async def create_tasks(self, task_size: int, **kwargs: Any) -> List[str]:

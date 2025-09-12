@@ -10,8 +10,6 @@ import tempfile
 from typing import IO, TYPE_CHECKING, Any, List
 from uuid import UUID
 
-from tqdm import tqdm
-
 from common.entity.candidate_entity import ParsedCandidate, ProcessingCandidate
 from common.prompts.parse_cv_prompt import ParseCvPrompt
 from common.service.create_batch_task_service.base_create_batch_task_service import (
@@ -44,8 +42,8 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
         return "/v1/responses"
     
     @property
-    def model(self) -> str:
-        return "gpt-4.1-mini"
+    def ai_model(self) -> str:
+        return "gpt-5-mini"
 
     async def create_tasks(self, 
         task_size: int,
@@ -82,7 +80,7 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
     
     async def _process_files_incrementally(self, dir_structure: MinioDirectoryStructure, task_size: int, minio_directory: str) -> List[str]:
         """Process files incrementally, creating candidates and JSONL files, sending batches when task_size is reached."""
-        batch_task_ids = []
+        batch_task_ids: List[str] = []
         current_batch_candidates = []
         current_file = None
         file_counter = 0
@@ -91,11 +89,7 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
         
         try:
             # Iterate over original files
-            for file_info in tqdm(
-                self.minio_repository.iterate_files_in_directory(dir_structure.original_directory),
-                desc="Processing candidates incrementally", 
-                unit="file"
-            ):
+            for file_info in self.minio_repository.iterate_files_in_import_directory(dir_structure.original_directory):
                 try:
                     # Get file_id from original CV stem (filename without extension)
                     file_id: UUID = UUID(dir_structure.extract_candidate_id_from_filename(file_info.object_name))
@@ -109,9 +103,11 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
                         total_skipped += 1
                         continue
                     
+                    raw_cv_content = self._get_candidate_cv_content_from_path(extracted_file_path)
+
                     # Create and save ProcessingCandidate document
                     processing_candidate = self._create_processing_candidate_document(
-                        file_id, extracted_file_path, original_file_path
+                        file_id, extracted_file_path, original_file_path, raw_cv_content
                     )
                     
                     # Open new JSONL file if needed
@@ -119,7 +115,11 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
                         current_file, file_path = self._open_new_jsonl_file(file_counter)
                     
                     # Write JSONL entry for this candidate
-                    if self._write_jsonl_entry_for_candidate(current_file, processing_candidate):
+                    if self._write_jsonl_entry_for_candidate(
+                        current_file,
+                        raw_cv_content,
+                        processing_candidate
+                    ):
                         total_processed += 1
                         current_batch_candidates.append(processing_candidate)
                         
@@ -130,25 +130,8 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
                         # Close current file and send batch
                         current_file.close()
                         
-                        # Send batch to batch manager
-                        batch_task_id = await self._send_single_jsonl_file_to_batch_manager(
-                            file_path, minio_directory
-                        )
-                        batch_task_ids.append(batch_task_id)
-                        
-                        await self.processing_candidate_repository.bulk_create_candidates(current_batch_candidates)
-
-                        # Update candidates with batch_task_id and status
-                        await self._update_candidates_batch_and_status(
-                            current_batch_candidates, batch_task_id
-                        )
-                        
-                        # Clean up temporary file
-                        self._cleanup_single_file(file_path)
-                        
-                        logger.info(
-                            f"Completed batch {file_counter} with {len(current_batch_candidates)} "
-                            f"candidates (batch_task_id: {batch_task_id})"
+                        await self._finalize_batch(
+                            file_path, minio_directory, current_batch_candidates, batch_task_ids, file_counter
                         )
                         
                         # Reset for next batch
@@ -165,23 +148,8 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
             if current_batch_candidates and current_file is not None:
                 current_file.close()
                 
-                # Send final batch to batch manager
-                batch_task_id = await self._send_single_jsonl_file_to_batch_manager(
-                    file_path, minio_directory
-                )
-                batch_task_ids.append(batch_task_id)
-                
-                # Update candidates with batch_task_id and status
-                await self._update_candidates_batch_and_status(
-                    current_batch_candidates, batch_task_id
-                )
-                
-                # Clean up temporary file
-                self._cleanup_single_file(file_path)
-                
-                logger.info(
-                    f"Completed final batch {file_counter} with {len(current_batch_candidates)} "
-                    f"candidates (batch_task_id: {batch_task_id})"
+                await self._finalize_batch(
+                    file_path, minio_directory, current_batch_candidates, batch_task_ids, file_counter
                 )
         
         finally:
@@ -195,7 +163,40 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
         )
         return batch_task_ids
     
-    def _create_processing_candidate_document(self, file_id: UUID, extracted_file_path: str, original_file_path: str) -> ProcessingCandidate:
+    async def _finalize_batch(self,
+        file_path: str,
+        minio_directory: str,
+        current_batch_candidates: List[ProcessingCandidate],
+        batch_task_ids: List[str],
+        file_counter: int
+    ) -> None:
+        # Send batch to batch manager
+        batch_task_id = await self._send_single_jsonl_file_to_batch_manager(
+            file_path, minio_directory
+        )
+        batch_task_ids.append(batch_task_id)
+        
+        await self.processing_candidate_repository.bulk_create_candidates(current_batch_candidates)
+
+        # Update candidates with batch_task_id and status
+        await self._update_candidates_batch_and_status(
+            current_batch_candidates, batch_task_id
+        )
+        
+        # Clean up temporary file
+        self._cleanup_single_file(file_path)
+        
+        logger.info(
+            f"Completed batch {file_counter} with {len(current_batch_candidates)} "
+            f"candidates (batch_task_id: {batch_task_id})"
+        )
+
+    def _create_processing_candidate_document(self,
+        file_id: UUID,
+        extracted_file_path: str,
+        original_file_path: str,
+        raw_cv_content: str
+    ) -> ProcessingCandidate:
         """Create a ProcessingCandidate document from file information."""
         
         return ProcessingCandidate(
@@ -203,7 +204,9 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
             original_cv_minio_path=original_file_path,
             txt_cv_minio_path=extracted_file_path,
             parsed_data=None,
+            parse_model=self.ai_model,
             status="pending_parse",
+            raw_cv=raw_cv_content,
         )
     
     def _open_new_jsonl_file(self, file_counter: int) -> tuple[IO[Any], str]:
@@ -216,14 +219,10 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
         logger.debug(f"Opened new batch file {file_counter}: {current_file.name}")
         return current_file, current_file.name
     
-    def _write_jsonl_entry_for_candidate(self, current_file: IO[Any], candidate: ProcessingCandidate) -> bool:
+    def _write_jsonl_entry_for_candidate(self, current_file: IO[Any], content: str, candidate: ProcessingCandidate) -> bool:
         """Write a JSONL entry for a candidate to the current file."""
         try:
-            content_str = self._get_candidate_cv_content(candidate)
-            if not content_str:
-                return False
-            
-            jsonl_entry = self._create_jsonl_entry(candidate, content_str)
+            jsonl_entry = self._create_jsonl_entry(candidate, content)
             current_file.write(json.dumps(jsonl_entry, ensure_ascii=False) + '\n')
             return True
             
@@ -240,10 +239,19 @@ class CreateCvParseBatchTaskService(BaseCreateBatchTaskService):
             logger.error(f"Failed to download CV content for candidate {candidate.id}: {e}")
             return ""
     
+    def _get_candidate_cv_content_from_path(self, txt_cv_minio_path: str) -> str:
+        """Get CV content from MinIO using file path."""
+        try:
+            content = self.minio_repository.download_file(txt_cv_minio_path)
+            return content.decode('utf-8').strip()
+        except Exception as e:
+            logger.error(f"Failed to download CV content from path {txt_cv_minio_path}: {e}")
+            return ""
+    
     def _create_jsonl_entry(self, candidate: ProcessingCandidate, content_str: str) -> dict[str, Any]:
         """Create a JSONL entry for a candidate."""
         request_body = {
-            "model": self.model,
+            "model": self.ai_model,
             "input": [
                 {"role": "system", "content": ParseCvPrompt.render_system()},
                 {"role": "user", "content": ParseCvPrompt.render_user(cv_text=content_str)}

@@ -9,7 +9,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Generator, List, Optional
+from typing import Any, Generator, Iterator, List, Optional
 
 from minio import Minio
 from minio.error import S3Error
@@ -91,7 +91,7 @@ class MinioRepository:
                 _log.error(f"Error ensuring bucket '{bucket_name}' exists: {e}")
                 raise
     
-    def list_files_in_directory(self, directory: str) -> List[FileInfo]:
+    def list_files_in_import_directory(self, directory: str) -> List[FileInfo]:
         """List all files in a specific directory within the candidate-import bucket
         
         Args:
@@ -259,7 +259,7 @@ class MinioRepository:
             _log.error(f"Unexpected error checking if file exists '{object_name}': {e}")
             raise
     
-    def iterate_files_in_directory(self, directory: str) -> Generator[FileInfo, None, None]:
+    def iterate_files_in_import_directory(self, directory: str) -> Generator[FileInfo, None, None]:
         """Iterate over files in a specific directory within the candidate-import bucket
         
         Args:
@@ -302,4 +302,93 @@ class MinioRepository:
             raise
         except Exception as e:
             _log.error(f"Unexpected error iterating files in directory '{directory}': {e}")
+            raise
+    
+    def list_files_in_directory(self, directory: str, bucket_name: str) -> List[str]:
+        """List all files in a specific directory within the specified bucket
+        
+        Args:
+            directory: Directory name (e.g., "test" will list files in /test/)
+            bucket_name: Name of the bucket to list files from
+            
+        Returns:
+            List of file paths (object names) in the directory
+            
+        Raises:
+            S3Error: If listing fails
+        """
+        try:
+            # Ensure directory has trailing slash for proper prefix matching
+            prefix = directory.rstrip('/') + '/' if directory else ''
+            
+            objects = self.client.list_objects(
+                bucket_name=bucket_name,
+                prefix=prefix,
+                recursive=True
+            )
+            
+            files = []
+            for obj in objects:
+                if obj.object_name is None:
+                    continue
+                    
+                # Skip directory entries (objects ending with /)
+                if obj.object_name.endswith('/'):
+                    continue
+                
+                files.append(obj.object_name)
+            
+            _log.info(f"Found {len(files)} files in directory '{directory}' in bucket '{bucket_name}'")
+            return files
+            
+        except S3Error as e:
+            _log.error(f"Failed to list files in directory '{directory}' in bucket '{bucket_name}': {e}")
+            raise
+        except Exception as e:
+            _log.error(f"Unexpected error listing files in directory '{directory}' in bucket '{bucket_name}': {e}")
+            raise
+    
+    def stream_file(self, file_path: str, bucket_name: str) -> Iterator[bytes]:
+        """Stream a file line by line from the specified bucket
+        
+        Args:
+            file_path: Path to the file in MinIO (full path including directory)
+            bucket_name: Name of the bucket containing the file
+            
+        Yields:
+            Individual lines from the file as bytes
+            
+        Raises:
+            S3Error: If streaming fails
+        """
+        try:
+            response = self.client.get_object(
+                bucket_name=bucket_name,
+                object_name=file_path
+            )
+            
+            try:
+                # Stream the file line by line
+                buffer = b""
+                for chunk in response.stream(32 * 1024):  # 32KB chunks
+                    buffer += chunk
+                    while b'\n' in buffer:
+                        line, buffer = buffer.split(b'\n', 1)
+                        yield line + b'\n'
+                
+                # Yield any remaining content
+                if buffer:
+                    yield buffer
+                    
+            finally:
+                response.close()
+                response.release_conn()
+            
+            _log.debug(f"Successfully streamed file: {file_path} from bucket '{bucket_name}'")
+            
+        except S3Error as e:
+            _log.error(f"Failed to stream file '{file_path}' from bucket '{bucket_name}': {e}")
+            raise
+        except Exception as e:
+            _log.error(f"Unexpected error streaming file '{file_path}' from bucket '{bucket_name}': {e}")
             raise
