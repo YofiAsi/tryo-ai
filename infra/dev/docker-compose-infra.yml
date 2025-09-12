@@ -11,7 +11,7 @@ services:
     env_file:
       - ./configs/.env
     ports:
-      - "27017:27017"
+      - "27018:27017"
     networks:
       - tyro-network
     healthcheck:
