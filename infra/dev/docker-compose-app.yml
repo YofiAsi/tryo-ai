@@ -9,6 +9,8 @@ services:
     depends_on:
       - tyro-backend-api
       - tyro-frontend
+      - tyro-batch-manager
+      - tyro-workers
     networks:
       - tyro-network
     restart: unless-stopped
@@ -45,6 +47,73 @@ services:
     restart: unless-stopped
     env_file:
       - ./configs/.env
+
+  tyro-batch-manager:
+    build:
+      context: ../../tyro-batch-manager/
+      dockerfile: Dockerfile.dev
+    container_name: tyro-batch-manager
+    ports:
+      - "5678:5678"  # Debug port
+    volumes:
+      - ../../tyro-batch-manager/app:/app/app
+    networks:
+      - tyro-network
+    restart: unless-stopped
+    env_file:
+      - ./configs/.env
+    environment:
+      - MINIO_ENDPOINT=tyro-minio:9000
+      - MINIO_SECURE=false
+      - MINIO_BATCH_TASKS_BUCKET=batch-tasks
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - DEBUG_MODE=true
+      - MONGODB_URL=mongodb://tyro-mongo:27017/tyro_batch_manager
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - BREAK_ON_EXCEPTIONS=true
+      - PYTHONUNBUFFERED=1
+      - PYTHONFAULTHANDLER=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  tyro-workers:
+    build:
+      context: ../../tyro-workers/
+      dockerfile: Dockerfile.dev
+    container_name: tyro-workers
+    ports:
+      - "8002:8002"  # Test API port
+      - "5679:5679"  # Debug port
+    volumes:
+      - ../../tyro-workers:/app
+    networks:
+      - tyro-network
+    restart: unless-stopped
+    env_file:
+      - ./configs/.env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PYTHONFAULTHANDLER=1
+      - ENVIRONMENT=development
+      - MONGODB_URL=mongodb://tyro-mongo:27017/tyro_db
+      - LOG_LEVEL=DEBUG
+      - DEBUG_MODE=true
+      - DEBUG_PORT=5679
+      - DEBUG_HOST=0.0.0.0
+      - WAIT_FOR_DEBUGGER=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
   tyro-network:
