@@ -1,0 +1,227 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: tyro-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./infra/configs/.env
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - tyro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: tyro-frontend
+    ports:
+      - "5173:80"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    env_file:
+      - ./infra/configs/.env
+    networks:
+      - tyro-network
+    restart: unless-stopped
+
+  batch_manager:
+    build:
+      context: ./batch_manager
+      dockerfile: Dockerfile.dev
+    container_name: tyro-batch-manager
+    ports:
+      - "8001:8000"
+      - "5678:5678"
+    volumes:
+      - ./batch_manager/app:/app/app
+    env_file:
+      - ./infra/configs/.env
+    environment:
+      - MINIO_ENDPOINT=tyro-minio:9000
+      - MINIO_SECURE=false
+      - MINIO_BATCH_TASKS_BUCKET=batch-tasks
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - DEBUG_MODE=true
+      - MONGODB_URL=mongodb://tyro-mongo:27017/tyro_batch_manager
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - BREAK_ON_EXCEPTIONS=true
+      - PYTHONUNBUFFERED=1
+      - PYTHONFAULTHANDLER=1
+    depends_on:
+      - mongo
+      - minio
+    networks:
+      - tyro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  workers:
+    build:
+      context: ./workers
+      dockerfile: Dockerfile.dev
+    container_name: tyro-workers
+    ports:
+      - "8002:8002"
+      - "5679:5679"
+    volumes:
+      - ./workers:/app
+    env_file:
+      - ./infra/configs/.env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PYTHONFAULTHANDLER=1
+      - ENVIRONMENT=development
+      - MONGODB_URL=mongodb://tyro-mongo:27017/tyro_db
+      - LOG_LEVEL=DEBUG
+      - DEBUG_MODE=true
+      - DEBUG_PORT=5679
+      - DEBUG_HOST=0.0.0.0
+      - WAIT_FOR_DEBUGGER=false
+    depends_on:
+      - mongo
+      - temporal
+    networks:
+      - tyro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mongo:
+    image: mongodb/mongodb-atlas-local
+    container_name: tyro-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - tyro-mongo-data:/data/db
+      - tyro-mongo-config:/data/configdb
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=${TZ:-UTC}
+    env_file:
+      - ./infra/configs/.env
+    networks:
+      - tyro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: tyro-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - tyro-redis-data:/data
+    networks:
+      - tyro-network
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: tyro-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - tyro-minio-data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=${TZ:-UTC}
+    env_file:
+      - ./infra/configs/.env
+    networks:
+      - tyro-network
+    restart: unless-stopped
+
+  temporal-postgresql:
+    image: postgres:12
+    container_name: tyro-temporal-postgresql
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - temporal-postgresql-data:/var/lib/postgresql/data
+    networks:
+      - tyro-network
+    restart: unless-stopped
+
+  temporal:
+    image: temporalio/auto-setup:1.28.1
+    container_name: tyro-temporal
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=tyro-temporal-postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/config/dynamicconfig/development-sql.yaml
+      - TEMPORAL_ADDRESS=tyro-temporal:7233
+      - TEMPORAL_CLI_ADDRESS=tyro-temporal:7233
+    volumes:
+      - ./infra/configs:/etc/temporal/config/dynamicconfig
+    depends_on:
+      - temporal-postgresql
+    networks:
+      - tyro-network
+    restart: unless-stopped
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    container_name: tyro-temporal-ui
+    ports:
+      - "8233:8080"
+    environment:
+      - TEMPORAL_ADDRESS=tyro-temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+    depends_on:
+      - temporal
+    networks:
+      - tyro-network
+    restart: unless-stopped
+
+networks:
+  tyro-network:
+
+volumes:
+  tyro-mongo-data:
+  tyro-mongo-config:
+  tyro-redis-data:
+  tyro-minio-data:
+  temporal-postgresql-data:
