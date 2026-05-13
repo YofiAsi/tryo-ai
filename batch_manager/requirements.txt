@@ -1,0 +1,14 @@
+beanie
+fastapi
+uvicorn
+python-multipart
+minio
+pydantic
+pydantic-settings
+tiktoken
+openai
+motor
+pymongo
+python-dotenv
+debugpy
+apscheduler
