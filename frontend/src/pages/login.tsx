@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { apiClient } from "@/lib/api"
 import { toast } from "@/components/ui/use-toast"
 import { generateGoogleOAuthUrl, storeOAuthState, generateOAuthState } from "@/lib/oauth-utils"
+import { ThemeToggle } from "@/components/layout/theme-toggle"
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -96,22 +97,22 @@ export function LoginPage() {
   // Show loading state while processing OAuth callback
   if (isProcessingCallback) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
+      <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-slate-900 dark:via-background dark:to-slate-900 flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           className="w-full max-w-md text-center"
         >
-          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+          <Card className="shadow-xl border-0 bg-card/80 backdrop-blur-sm">
             <CardContent className="p-8">
               <div className="flex items-center justify-center mb-4">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className="text-lg font-semibold text-foreground mb-2">
                 Completing Authentication
               </h3>
-              <p className="text-gray-600">
+              <p className="text-muted-foreground">
                 Please wait while we complete your Google sign-in...
               </p>
             </CardContent>
@@ -122,14 +123,17 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
+    <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-slate-900 dark:via-background dark:to-slate-900 flex items-center justify-center p-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="w-full max-w-md"
       >
-        <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+        <Card className="shadow-xl border-0 bg-card/80 backdrop-blur-sm">
           <CardHeader className="text-center pb-6">
             <motion.div
               initial={{ scale: 0.8 }}
@@ -141,10 +145,10 @@ export function LoginPage() {
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
               </svg>
             </motion.div>
-            <CardTitle className="text-2xl font-bold text-gray-900">
+            <CardTitle className="text-2xl font-bold text-foreground">
               Welcome to HR Scouting
             </CardTitle>
-            <CardDescription className="text-gray-600">
+            <CardDescription className="text-muted-foreground">
               Sign in to manage your job positions and candidate matches
             </CardDescription>
           </CardHeader>
@@ -160,7 +164,7 @@ export function LoginPage() {
                 <Button
                   onClick={handleGoogleLogin}
                   disabled={isLoading}
-                  className="w-full h-12 bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 font-medium relative overflow-hidden group"
+                  className="w-full h-12 bg-background border-2 border-border hover:bg-muted text-foreground font-medium relative overflow-hidden group"
                 >
                   {isLoading ? (
                     <div className="flex items-center gap-3">
@@ -176,7 +180,7 @@ export function LoginPage() {
                 </Button>
                 
                 <div className="text-center">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     By signing in, you agree to our Terms of Service and Privacy Policy
                   </p>
                 </div>
@@ -196,15 +200,15 @@ export function LoginPage() {
                        className="h-16 w-16 rounded-full border-4 border-white shadow-lg"
                      />
                      <div className="absolute -bottom-1 -right-1">
-                       <CheckCircle className="h-6 w-6 text-green-500 bg-white rounded-full" />
+                       <CheckCircle className="h-6 w-6 text-green-500 bg-background rounded-full" />
                      </div>
                    </div>
                  </div>
                  <div>
-                   <h3 className="font-semibold text-gray-900">{user?.name}</h3>
-                   <p className="text-sm text-gray-600">{user?.email}</p>
+                   <h3 className="font-semibold text-foreground">{user?.name}</h3>
+                   <p className="text-sm text-muted-foreground">{user?.email}</p>
                  </div>
-                <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Redirecting to dashboard...</span>
                 </div>
@@ -219,7 +223,7 @@ export function LoginPage() {
           transition={{ delay: 0.5 }}
           className="mt-6 text-center"
         >
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Powered by FastAPI • MongoDB
           </p>
         </motion.div>

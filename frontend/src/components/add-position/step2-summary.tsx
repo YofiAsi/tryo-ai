@@ -274,8 +274,8 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Create Job Position</h1>
-            <p className="text-gray-600 mt-2">Fill in the details for your new job position</p>
+            <h1 className="text-3xl font-bold text-foreground">Create Job Position</h1>
+            <p className="text-muted-foreground mt-2">Fill in the details for your new job position</p>
           </div>
           {onBack && (
             <Button variant="outline" onClick={onBack} className="gap-2">
@@ -297,7 +297,7 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-blue-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
+                <h3 className="text-lg font-semibold text-foreground">Basic Information</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -348,7 +348,7 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <MapPin className="h-5 w-5 text-green-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Location & Work Type</h3>
+                <h3 className="text-lg font-semibold text-foreground">Location & Work Type</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -404,7 +404,7 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Briefcase className="h-5 w-5 text-purple-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Employment Details</h3>
+                <h3 className="text-lg font-semibold text-foreground">Employment Details</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -457,18 +457,18 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Briefcase className="h-5 w-5 text-orange-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Skills *</h3>
+                <h3 className="text-lg font-semibold text-foreground">Skills *</h3>
               </div>
               <div className="space-y-3">
                 <div className="space-y-3">
                   {formData.skills.map((skill, index) => (
-                    <div key={index} className="flex items-center gap-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div key={index} className="flex items-center gap-4 p-4 bg-muted/50 border border-border rounded-lg">
                       <div className="flex-1">
-                        <span className="font-medium text-gray-900">{skill.name}</span>
+                        <span className="font-medium text-foreground">{skill.name}</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
-                          <Label className="text-sm font-medium text-gray-600">Years:</Label>
+                          <Label className="text-sm font-medium text-muted-foreground">Years:</Label>
                           <Input
                             type="number"
                             min="1"
@@ -482,7 +482,7 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
                           />
                         </div>
                         <div className="flex items-center gap-3">
-                          <Label className="text-sm font-medium text-gray-600">Weight:</Label>
+                          <Label className="text-sm font-medium text-muted-foreground">Weight:</Label>
                           <div className="w-28">
                             <Slider
                               value={[skill.weight]}
@@ -497,7 +497,7 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
                               className="w-full"
                             />
                           </div>
-                          <Badge variant="secondary" className="min-w-[24px] justify-center bg-gray-100 text-gray-700 border-gray-200">
+                          <Badge variant="secondary" className="min-w-[24px] justify-center bg-muted text-muted-foreground border-border">
                             {skill.weight}
                           </Badge>
                         </div>
@@ -536,12 +536,12 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-indigo-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Languages</h3>
+                <h3 className="text-lg font-semibold text-foreground">Languages</h3>
               </div>
               <div className="space-y-3">
                 <div className="space-y-2">
                   {formData.languages.map((language, index) => (
-                    <Badge key={index} variant="outline" className="gap-2 bg-gray-50">
+                    <Badge key={index} variant="outline" className="gap-2 bg-muted/50">
                       {language}
                       <Button
                         variant="ghost"
@@ -574,7 +574,7 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <GraduationCap className="h-5 w-5 text-teal-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Education & Certifications</h3>
+                <h3 className="text-lg font-semibold text-foreground">Education & Certifications</h3>
               </div>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -591,7 +591,7 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
                   <Label className="text-sm font-medium">Certifications</Label>
                   <div className="space-y-2">
                     {formData.certifications.map((cert, index) => (
-                      <Badge key={index} variant="outline" className="gap-2 bg-gray-50">
+                      <Badge key={index} variant="outline" className="gap-2 bg-muted/50">
                         {cert}
                         <Button
                           variant="ghost"
@@ -625,7 +625,7 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-amber-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Responsibilities & Notes</h3>
+                <h3 className="text-lg font-semibold text-foreground">Responsibilities & Notes</h3>
               </div>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -659,8 +659,8 @@ export function Step2Summary({ onComplete, onBack, initialData }: Step2SummaryPr
             {/* Contact Information */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <UserIcon className="h-5 w-5 text-slate-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Contact Information</h3>
+                <UserIcon className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold text-foreground">Contact Information</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">

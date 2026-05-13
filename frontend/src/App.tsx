@@ -11,9 +11,11 @@ import { LoginPage } from "@/pages/login"
 import { ProtectedRoute } from "@/routes/protected-route"
 import { AdminRoute } from "@/routes/admin-route"
 import { AuthProvider } from "@/contexts/auth-context"
+import { ThemeProvider } from "@/contexts/theme-context"
 
 export default function App() {
   return (
+    <ThemeProvider defaultTheme="system" storageKey="tyro-theme">
     <AuthProvider>
         <Router>
           <Routes>
@@ -42,5 +44,6 @@ export default function App() {
           </Routes>
         </Router>
       </AuthProvider>
+    </ThemeProvider>
   )
 }

@@ -14,6 +14,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/contexts/auth-context"
+import { ThemeToggle } from "@/components/layout/theme-toggle"
 
 const menuItems = [
   {
@@ -124,6 +125,7 @@ export function AppSidebar() {
                 </p>
               )}
             </div>
+            <ThemeToggle className="text-muted-foreground hover:text-foreground" />
             <Button
               variant="ghost"
               size="sm"

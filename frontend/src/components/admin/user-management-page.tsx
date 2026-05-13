@@ -241,7 +241,7 @@ export function UserManagementPage() {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center space-y-4">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
-            <p className="text-gray-600">Loading users...</p>
+            <p className="text-muted-foreground">Loading users...</p>
           </div>
         </div>
       </div>

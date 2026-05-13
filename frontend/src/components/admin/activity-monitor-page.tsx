@@ -179,7 +179,7 @@ export function ActivityMonitorPage() {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center space-y-4">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
-            <p className="text-gray-600">Loading activity logs...</p>
+            <p className="text-muted-foreground">Loading activity logs...</p>
           </div>
         </div>
       </div>
