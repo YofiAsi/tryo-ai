@@ -56,7 +56,8 @@ async def chat_with_job_analyzer(
     try:
         service_request = JobPositionChatServiceRequest(
             message=request.message,
-            message_history=None
+            message_history=None,
+            model=request.model,
         )
 
         if request.message_history is not None:
@@ -98,7 +99,8 @@ async def analyze_job_position(
     """
     try:
         service_request = JobPositionAnalyzerServiceRequest(
-            message_history=ModelMessagesTypeAdapter.validate_python(json.loads(request.message_history))
+            message_history=ModelMessagesTypeAdapter.validate_python(json.loads(request.message_history)),
+            model=request.model,
         )
 
         result = await ai_service.job_position_analyzer(service_request)

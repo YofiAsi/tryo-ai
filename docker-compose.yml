@@ -13,6 +13,9 @@ services:
     depends_on:
       - mongo
       - redis
+      - litellm
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - tyro-network
     restart: unless-stopped
@@ -112,6 +115,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: tyro-litellm
+    command: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./infra/litellm/config.yaml:/etc/litellm/config.yaml:ro
+    env_file:
+      - ./infra/configs/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - tyro-network
+    restart: unless-stopped
 
   mongo:
     image: mongodb/mongodb-atlas-local

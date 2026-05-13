@@ -15,20 +15,25 @@ from app.schema.base_dto import BaseModelJsonSerializable
 class JobPositionChatServiceRequest(BaseModelJsonSerializable):
     """
     Request DTO for job position chat interactions.
-    
+
     This model represents the input for a chat session with the job position analyzer agent.
     """
-    
+
     message: str = Field(
         ...,
         description="The user's message to the job position analyzer agent",
         min_length=1,
         max_length=10000
     )
-    
+
     message_history: Optional[List[ModelMessage]] = Field(
         default=None,
         description="List of previous messages in the conversation for context"
+    )
+
+    model: Optional[str] = Field(
+        default=None,
+        description="LiteLLM model id (e.g. 'gpt-4o', 'claude-sonnet-4-5', 'ollama/llama3.1'). Falls back to server default when None."
     )
 
 
@@ -69,6 +74,11 @@ class JobPositionChatRequest(BaseModelJsonSerializable):
         description="List of previous messages in the conversation for context in json format"
     )
 
+    model: Optional[str] = Field(
+        default=None,
+        description="LiteLLM model id (e.g. 'gpt-4o', 'claude-sonnet-4-5', 'ollama/llama3.1'). Falls back to server default when None."
+    )
+
 
 class JobPositionChatResponse(BaseModelJsonSerializable):
     """
@@ -91,25 +101,35 @@ class JobPositionChatResponse(BaseModelJsonSerializable):
 class JobPositionAnalyzerServiceRequest(BaseModelJsonSerializable):
     """
     Request DTO for job position analyzer interactions.
-    
+
     This model represents the input for a job position analyzer session.
     """
-    
+
     message_history: Optional[List[ModelMessage]] = Field(
         default=None,
         description="List of previous messages in the conversation for context"
+    )
+
+    model: Optional[str] = Field(
+        default=None,
+        description="LiteLLM model id. Falls back to server default when None."
     )
 
 
 class JobPositionAnalyzerRequest(BaseModelJsonSerializable):
     """
     Request DTO for job position analyzer interactions.
-    
+
     This model represents the input for a job position analyzer session.
     """
-    
+
     message_history: str = Field(
         default=None,
         description="List of previous messages in the conversation for context in json format"
+    )
+
+    model: Optional[str] = Field(
+        default=None,
+        description="LiteLLM model id. Falls back to server default when None."
     )
 

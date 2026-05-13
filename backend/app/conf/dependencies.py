@@ -18,7 +18,6 @@ from app.service.ai_agents_service import AIAgentsService
 from app.service.auth_service import auth_service
 from app.entity.user_entity import User
 from app.consts import UserRole
-from app.conf.app_settings import openai_settings
 
 DEV_AUTH_BYPASS = os.getenv("DEV_AUTH_BYPASS", "false").lower() == "true"
 DEV_USER_EMAIL = "dev@local.dev"

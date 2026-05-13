@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, EmailStr
 from pydantic_ai import Agent
 
-from app.conf.app_settings import openai_settings
 from app.consts.enums import SeniorityLevel, WorkArrangement
 from app.entity.job_position_entity import EmploymentType, JobSkill, Requirements
 
