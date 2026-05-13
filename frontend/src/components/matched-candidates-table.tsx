@@ -86,7 +86,8 @@ export function MatchedCandidatesTable({ candidates }: MatchedCandidatesTablePro
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 * index }}
-              className="hover:bg-muted/50 transition-colors"
+              className="cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => toggleRow(candidate.id)}
             >
               <TableCell className="font-medium">{candidate.name}</TableCell>
               <TableCell>
@@ -107,9 +108,10 @@ export function MatchedCandidatesTable({ candidates }: MatchedCandidatesTablePro
               <TableCell className="text-muted-foreground">{candidate.experience}</TableCell>
               <TableCell>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => toggleRow(candidate.id)}
+                  tabIndex={-1}
                   className="h-8 w-8 p-0"
                 >
                   {expandedRows.has(candidate.id) ? (
