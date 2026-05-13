@@ -165,7 +165,7 @@ export function PositionsPage() {
               <RefreshCw className={`h-4 w-4 ${isValidating ? 'animate-spin' : ''}`} />
               {isValidating ? 'Refreshing...' : 'Refresh'}
             </Button>
-            <Button onClick={() => navigate("/add-position")} className="gap-2">
+            <Button onClick={() => navigate("/positions/add")} className="gap-2">
               <Plus className="h-4 w-4" />
               Add Position
             </Button>
