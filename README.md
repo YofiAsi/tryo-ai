@@ -15,7 +15,7 @@ HR / recruitment monorepo — positions, AI-assisted drafting, CVs, Celery worke
 
 **Run:** root `docker-compose.yml` · **Details:** [`CLAUDE.md`](./CLAUDE.md)
 
-## Screenshots
+## Screenshots (dark theme)
 
 <p align="center">
   <img src="./docs/assets/add-position-chat.png" alt="Add Position chat" width="920">
