@@ -1,3 +1,6 @@
+import os
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -14,9 +17,30 @@ from app.service.activity_log_service import ActivityLogService
 from app.service.ai_agents_service import AIAgentsService
 from app.service.auth_service import auth_service
 from app.entity.user_entity import User
+from app.consts import UserRole
 from app.conf.app_settings import openai_settings
 
-security = HTTPBearer()
+DEV_AUTH_BYPASS = os.getenv("DEV_AUTH_BYPASS", "false").lower() == "true"
+DEV_USER_EMAIL = "dev@local.dev"
+
+security = HTTPBearer(auto_error=not DEV_AUTH_BYPASS)
+
+
+async def _get_or_create_dev_user() -> User:
+    user = await User.find_one(User.email == DEV_USER_EMAIL)
+    if user is None:
+        now = datetime.now(timezone.utc)
+        user = User(
+            name="Dev User",
+            email=DEV_USER_EMAIL,
+            role=UserRole.ADMIN,
+            is_active=True,
+            auth_provider="dev",
+            created_at=now,
+            updated_at=now,
+        )
+        await User.create(user)
+    return user
 
 
 async def get_user_repository() -> UserRepository:
@@ -70,11 +94,13 @@ async def get_auth_service(
     return AuthService(activity_log_service=activity_log_service)
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+async def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> User:
     """
     Dependency to get the current authenticated user
     Use this in your API endpoints to require authentication
     """
+    if DEV_AUTH_BYPASS:
+        return await _get_or_create_dev_user()
     try:
         user = await auth_service.get_current_user(credentials.credentials)
         return user

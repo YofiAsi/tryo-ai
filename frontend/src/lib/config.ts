@@ -21,5 +21,6 @@ export const config = {
   features: {
     enableAnalytics: import.meta.env.VITE_ENABLE_ANALYTICS === 'true',
     enableDebugMode: import.meta.env.VITE_DEBUG_MODE === 'true',
+    devAuthBypass: import.meta.env.VITE_DEV_AUTH_BYPASS === 'true',
   },
 } as const

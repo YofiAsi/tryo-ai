@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { AuthUserResponse } from "@/lib/api"
 import { apiClient } from "@/lib/api"
+import { config } from "@/lib/config"
 
 interface User {
   id: string
@@ -60,8 +61,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        if (config.features.devAuthBypass) {
+          apiClient.setToken("dev-bypass")
+          const currentUser = await fetchCurrentUser()
+          setUser(currentUser)
+          return
+        }
+
         const token = localStorage.getItem(TOKEN_KEY)
-        
+
         if (token) {
           apiClient.setToken(token)
           const currentUser = await fetchCurrentUser()

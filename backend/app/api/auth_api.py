@@ -6,7 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.conf.app_settings import server_settings
 from app.api.api_response import response_fail_status_codes
 
-from app.conf.dependencies import get_auth_service
+from app.conf.dependencies import get_auth_service, get_current_user as get_authenticated_user
 from app.service.auth_service import AuthService
 
 from app.schema.auth_dto import GoogleAuthRequest, LoginResponse, AuthUserResponse, GoogleLoginResponse, LogoutResponse
@@ -102,41 +102,23 @@ async def google_callback(
     response_description="Current user profile information"
 )
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    auth_service: AuthService = Depends(get_auth_service)
+    user: User = Depends(get_authenticated_user),
 ):
     """
     Get current authenticated user information
-    
-    This endpoint returns the profile information of the currently
-    authenticated user based on their JWT token.
-    
-    Returns:
-        AuthUserResponse: Current user's profile information
-        
-    Raises:
-        HTTPException: If authentication credentials are invalid
     """
-    try:
-        user = await auth_service.get_current_user(credentials.credentials)
-        
-        return AuthUserResponse(
-            id=str(user.id),
-            email=user.email,
-            name=user.name,
-            role=user.role.value,
-            picture=user.picture,
-            is_active=user.is_active,
-            auth_provider=user.auth_provider,
-            created_at=user.created_at or user.created_at,
-            updated_at=user.updated_at or user.updated_at,
-            last_login=user.last_login
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials"
-        )
+    return AuthUserResponse(
+        id=str(user.id),
+        email=user.email,
+        name=user.name,
+        role=user.role.value,
+        picture=user.picture,
+        is_active=user.is_active,
+        auth_provider=user.auth_provider,
+        created_at=user.created_at or user.created_at,
+        updated_at=user.updated_at or user.updated_at,
+        last_login=user.last_login
+    )
 
 
 @router.post(
