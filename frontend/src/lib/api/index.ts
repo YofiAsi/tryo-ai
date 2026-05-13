@@ -8,6 +8,7 @@ export * from './candidates-client'
 export * from './job-positions-client'
 export * from './admin-client'
 export * from './ai-agents-client'
+export * from './llm-client'
 
 import { BaseApiClient } from './base-client'
 import { AuthClient } from './auth-client'
@@ -15,6 +16,7 @@ import { CandidatesClient } from './candidates-client'
 import { JobPositionsClient } from './job-positions-client'
 import { AdminClient } from './admin-client'
 import { AiAgentsClient } from './ai-agents-client'
+import { LlmClient } from './llm-client'
 
 // Main API Client class that combines all clients
 export class ApiClient extends BaseApiClient {
@@ -23,16 +25,18 @@ export class ApiClient extends BaseApiClient {
   public jobPositions: JobPositionsClient
   public admin: AdminClient
   public aiAgents: AiAgentsClient
+  public llm: LlmClient
 
   constructor(baseUrl?: string) {
     super(baseUrl)
-    
+
     // Initialize all client modules
     this.auth = new AuthClient(baseUrl)
     this.candidates = new CandidatesClient(baseUrl)
     this.jobPositions = new JobPositionsClient(baseUrl)
     this.admin = new AdminClient(baseUrl)
     this.aiAgents = new AiAgentsClient(baseUrl)
+    this.llm = new LlmClient(baseUrl)
   }
 
   // Override setToken to update all client instances
@@ -43,6 +47,7 @@ export class ApiClient extends BaseApiClient {
     this.jobPositions.setToken(token)
     this.admin.setToken(token)
     this.aiAgents.setToken(token)
+    this.llm.setToken(token)
   }
 }
 
@@ -55,3 +60,4 @@ export const candidatesClient = new CandidatesClient()
 export const jobPositionsClient = new JobPositionsClient()
 export const adminClient = new AdminClient()
 export const aiAgentsClient = new AiAgentsClient()
+export const llmClient = new LlmClient()

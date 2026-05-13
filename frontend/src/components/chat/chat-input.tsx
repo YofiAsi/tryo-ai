@@ -12,6 +12,7 @@ interface ChatInputProps {
   placeholder?: string
   className?: string
   extraButtons?: React.ReactNode
+  leadingSlot?: React.ReactNode
 }
 
 export function ChatInput({ 
@@ -19,10 +20,19 @@ export function ChatInput({
   isLoading = false, 
   placeholder = "Type your message...",
   className = "",
-  extraButtons
+  extraButtons,
+  leadingSlot,
 }: ChatInputProps) {
   const [message, setMessage] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const wasLoading = useRef(false)
+
+  useEffect(() => {
+    if (wasLoading.current && !isLoading) {
+      textareaRef.current?.focus({ preventScroll: true })
+    }
+    wasLoading.current = isLoading
+  }, [isLoading])
 
   const handleSend = () => {
     if (message.trim() && !isLoading) {
@@ -55,7 +65,8 @@ export function ChatInput({
     >
       <div className="relative">
         <div className="flex gap-3 items-end max-w-4xl mx-auto">
-          <div className="flex-1 relative">
+          {leadingSlot}
+          <div className="flex-1 relative min-w-0">
             <Textarea
               ref={textareaRef}
               value={message}

@@ -11,6 +11,7 @@ interface ChatInterfaceProps {
   initialMessages?: ChatMessage[]
   isLoading?: boolean
   extraButtons?: React.ReactNode
+  inputLeading?: React.ReactNode
   emptyStateMessage?: {
     title: string
     description: string
@@ -18,7 +19,7 @@ interface ChatInterfaceProps {
   }
 }
 
-export function ChatInterface({ className = "", onSendMessage, initialMessages = [], isLoading: externalIsLoading = false, extraButtons, emptyStateMessage }: ChatInterfaceProps) {
+export function ChatInterface({ className = "", onSendMessage, initialMessages = [], isLoading: externalIsLoading = false, extraButtons, inputLeading, emptyStateMessage }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -90,6 +91,7 @@ export function ChatInterface({ className = "", onSendMessage, initialMessages =
         placeholder="Type your message..."
         className="flex-shrink-0 border-t bg-background"
         extraButtons={extraButtons}
+        leadingSlot={inputLeading}
       />
     </motion.div>
   )

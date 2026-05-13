@@ -33,10 +33,14 @@ export function ChatBubble({ message, isAI, className = "" }: ChatBubbleProps) {
           className={`px-4 py-3 rounded-2xl ${
             isAI
               ? 'bg-muted text-foreground rounded-tl-sm'
-              : 'bg-primary text-white rounded-tr-sm'
+              : 'bg-primary text-primary-foreground rounded-tr-sm'
           }`}
         >
-          <div className={`text-sm leading-relaxed prose prose-sm max-w-none ${isAI ? 'text-foreground' : 'text-white'}`}>
+          <div
+            className={`text-sm leading-relaxed prose prose-sm max-w-none ${
+              isAI ? 'text-foreground dark:prose-invert' : 'text-primary-foreground'
+            }`}
+          >
             <ReactMarkdown>{message}</ReactMarkdown>
           </div>
         </div>

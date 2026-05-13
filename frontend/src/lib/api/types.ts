@@ -308,6 +308,7 @@ export interface ActivityLogSummaryDTO {
 export interface JobPositionChatRequest {
   message: string
   message_history?: string
+  model?: string
 }
 
 export interface JobPositionChatResponse {
@@ -317,4 +318,15 @@ export interface JobPositionChatResponse {
 
 export interface JobPositionAnalyzeRequest {
   message_history: string
+  model?: string
+}
+
+export interface LLMModel {
+  id: string
+}
+
+export interface LLMCatalogResponse {
+  models: LLMModel[]
+  default_chat: string
+  default_analyzer: string
 }
