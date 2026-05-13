@@ -11,6 +11,7 @@ from app.conf.env.db_config import init_db
 from app.conf.env.sentry_config import init_sentry, is_sentry_enabled
 from app.errors.business_exception import BusinessException
 from app.migration.user_migration import init_migration
+from app.migration.job_position_migration import init_job_position_migration
 
 
 _log = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ async def lifespan(_):
     
     await init_db()
     await init_migration()
+    await init_job_position_migration()
     yield
 
 
