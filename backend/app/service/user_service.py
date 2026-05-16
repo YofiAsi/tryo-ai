@@ -104,8 +104,7 @@ class UserService:
             role=user.role,
             is_active=True,
             created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),  # Same as created_at for new documents
-            last_login=None
+            updated_at=datetime.now(timezone.utc),
         )
         
         created_user = await self.repository.create(user)

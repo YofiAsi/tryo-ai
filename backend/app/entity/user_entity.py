@@ -11,22 +11,14 @@ class User(Document):
     email: EmailStr
     role: UserRole
     is_active: bool
-    # OAuth2 fields
-    google_id: str | None = None
-    auth_provider: str = "email"  # "email" or "google"
-    picture: str | None = None
-    # Timestamps
     created_at: datetime | None = None
     updated_at: datetime | None = None
-    last_login: datetime | None = None
 
     class Settings:
         name = "users"
         validate_on_save = True
         indexes = [
             "email",
-            "google_id",
-            "auth_provider"
         ]
 
     @before_event(Update, Replace)

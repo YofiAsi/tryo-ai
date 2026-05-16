@@ -32,10 +32,6 @@ async def lifespan(_):
 
 tags_metadata = [
     {
-        "name": "auth",
-        "description": "Operations with authentication. The **login** endpoint returns the access token."
-    },
-    {
         "name": "account",
         "description": "Operations with account. The **account** endpoint returns the account information."
     },

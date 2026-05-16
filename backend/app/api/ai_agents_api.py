@@ -11,8 +11,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.conf.dependencies import get_current_active_user, get_ai_agents_service
-from app.entity.user_entity import User
+from app.conf.dependencies import get_ai_agents_service
 from app.service.ai_agents_service import AIAgentsService
 from app.conf.app_settings import server_settings
 from app.api.api_response import response_fail_status_codes
@@ -28,7 +27,6 @@ _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix=_path,
                    tags=[_resource],
-                   # dependencies=[Depends(auth_handler.get_token_user)],
                    responses=response_fail_status_codes
                    )
 

@@ -34,7 +34,6 @@ class UserDTO(_UserBase):
     is_active: bool = Field(..., title="Is Active", description="User's active status")
     created_at: datetime = Field(..., title="Created Date", description="Created Date of the record")
     updated_at: datetime = Field(..., title="Last Updated Date", description="Last Updated Date of the record")
-    last_login: Optional[datetime] = Field(None, title="Last Login Date", description="Last Login Date of the record")
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -47,8 +46,7 @@ class UserDTO(_UserBase):
                 "role": "admin",
                 "is_active": True,
                 "created_at": "2021-01-01T00:00:00",
-                "updated_at": "2021-01-01T00:00:00",
-                "last_login": "2021-01-01T00:00:00"
+                "updated_at": "2021-01-01T00:00:00"
             }})
 
 

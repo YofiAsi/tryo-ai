@@ -31,7 +31,6 @@ _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix=_path,
                    tags=[_resource],
-                   # dependencies=[Depends(auth_handler.get_token_user)],
                    responses=response_fail_status_codes
                    )
 

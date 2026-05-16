@@ -69,7 +69,6 @@ async def init_db() -> None:
             entity.JobPosition,
             entity.Candidate,
             entity.Task,
-            entity.ActivityLog,
         ],
     )
 
