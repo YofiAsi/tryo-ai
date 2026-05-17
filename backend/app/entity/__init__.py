@@ -5,10 +5,9 @@ import logging
 from app.entity.user_entity import User
 from app.entity.candidate_entity import Candidate
 from app.entity.job_position_entity import JobPosition
-from app.entity.task_entity import Task 
-from app.entity.activity_log_entity import ActivityLog
+from app.entity.task_entity import Task
 
-db_entities = [User, Candidate, JobPosition, Task, ActivityLog]
+db_entities = [User, Candidate, JobPosition, Task]
 log = logging.getLogger(__name__)
 
 

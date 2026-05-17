@@ -3,7 +3,6 @@ from app.conf.env.log_config import LoggingSettings
 from app.conf.env.cors_config import CorsSettings
 from app.conf.env.server_config import ServerSettings
 from app.conf.env.db_config import DatabaseSettings
-from app.conf.env.oauth_config import OAuth2Settings
 from app.conf.env.llm_config import LLMSettings
 
 
@@ -30,5 +29,4 @@ log_settings = LoggingSettings()
 cors_settings = CorsSettings()
 server_settings = ServerSettings()
 db_settings = DatabaseSettings()
-oauth2_settings = OAuth2Settings()
 llm_settings = LLMSettings()

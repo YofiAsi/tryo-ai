@@ -71,7 +71,6 @@ def init_log():
     logging.getLogger("fastapi").setLevel(logging.WARN)
     logging.getLogger("beanie").setLevel(logging.WARN)
     logging.getLogger("urllib3").setLevel(logging.WARN)
-    logging.getLogger("passlib").setLevel(logging.WARN)
     logging.getLogger("starlette").setLevel(logging.WARN)
     logging.getLogger("bitsandbytes").setLevel(logging.WARN)
     logging.getLogger("sentence_transformers").setLevel(logging.WARN)

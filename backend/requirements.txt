@@ -5,5 +5,4 @@ email-validator==2.1.1
 fastapi==0.116.1
 fastapi-cli==0.0.8
 openai==1.102.0
-python-jose==3.5.0
 sentry-sdk==2.35.1

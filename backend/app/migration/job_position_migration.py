@@ -31,7 +31,17 @@ POSITIONS = [
         "employment_type": EmploymentType.FULL_TIME,
         "seniority_level": SeniorityLevel.SENIOR,
         "work_arrangement": WorkArrangement.REMOTE,
-        "summary": "Own and scale our async Python services powering a high-throughput data ingestion platform.",
+        "summary": (
+            "Nimbus Labs is hiring a Senior Backend Engineer for a full-time remote role based in "
+            "Tel Aviv to own and scale async Python services on a FastAPI + MongoDB ingestion platform "
+            "processing roughly 50k events per second. You will design reliable pipelines, strengthen "
+            "tracing and metrics, mentor mid-level engineers, and partner with platform, ML, and SRE on "
+            "capacity planning and rollouts. Core stack: Python (6+ years), FastAPI, MongoDB, Docker, "
+            "and Kafka. Bachelor's in Computer Science required; AWS Certified Developer preferred. "
+            "Fluent English and native Hebrew. Annual compensation around 180,000 ILS. Best fit for "
+            "engineers with production async/await experience who care about clean domain boundaries "
+            "and pragmatic testing."
+        ),
         "original_text": (
             "Nimbus Labs is hiring a Senior Backend Engineer to lead the design of our FastAPI + MongoDB "
             "ingestion services. You'll partner with platform and ML teams to ship reliable async pipelines, "
@@ -76,7 +86,17 @@ POSITIONS = [
         "employment_type": EmploymentType.FULL_TIME,
         "seniority_level": SeniorityLevel.MID,
         "work_arrangement": WorkArrangement.HYBRID,
-        "summary": "Build delightful, accessible UIs for our B2B analytics suite with React, TypeScript, and Tailwind.",
+        "summary": (
+            "Brightline is looking for a mid-level Frontend Engineer to join a small senior team in "
+            "Berlin on a full-time hybrid schedule (two days per week on-site). You will own feature "
+            "areas of our B2B analytics product, shipping production React and TypeScript with "
+            "Tailwind, collaborating with designers on accessible components, refactoring legacy class "
+            "components to hooks, and testing with Vitest and Playwright. Required skills include "
+            "React and TypeScript (3+ years each), Tailwind CSS, and Vite as a plus. Bachelor's in "
+            "Software Engineering; fluent English and intermediate German. Salary around 85,000 EUR "
+            "with visa relocation support. Ideal for engineers who prioritize accessibility, polish, "
+            "and developer experience."
+        ),
         "original_text": (
             "Brightline is looking for a mid-level Frontend Engineer to join a small, senior team. You'll own "
             "feature areas of our analytics product, working closely with designers and backend engineers to "
@@ -119,7 +139,17 @@ POSITIONS = [
         "employment_type": EmploymentType.FULL_TIME,
         "seniority_level": SeniorityLevel.SENIOR,
         "work_arrangement": WorkArrangement.ON_SITE,
-        "summary": "Run and harden a multi-region Kubernetes platform supporting hundreds of internal services.",
+        "summary": (
+            "Vector Cloud's platform team in London needs a Senior DevOps / Site Reliability Engineer "
+            "on a full-time on-site arrangement (Monday through Thursday on-site, Friday remote) to "
+            "operate and harden a multi-region EKS estate supporting hundreds of internal services. "
+            "You will own Terraform modules for EKS, RDS, and networking, run GitOps deployments via "
+            "ArgoCD, lead post-incident reviews, and coach product teams on SLOs and on-call practice. "
+            "Key skills: Kubernetes (5+ years), Terraform, AWS, Prometheus, and ArgoCD. CKA "
+            "certification and a bachelor's in Computer Science required; UK right-to-work mandatory. "
+            "Salary around 110,000 GBP. Suited to reliability-focused engineers who enjoy hands-on "
+            "infrastructure ownership in a high-scale environment."
+        ),
         "original_text": (
             "Vector Cloud's platform team operates a multi-region EKS estate. We're hiring a Senior SRE to own "
             "Terraform modules, GitOps pipelines, and incident response practices. The role is on-site in our "
@@ -160,7 +190,17 @@ POSITIONS = [
         "employment_type": EmploymentType.CONTRACT,
         "seniority_level": SeniorityLevel.LEAD,
         "work_arrangement": WorkArrangement.REMOTE,
-        "summary": "Lead applied ML work on retrieval and ranking for our enterprise search product.",
+        "summary": (
+            "Helix AI is engaging a Lead Machine Learning Engineer on a 12-month full-time remote "
+            "contract (US timezone overlap required) based in New York to improve retrieval and "
+            "re-ranking for our enterprise search product. You will design experiments, prototype in "
+            "PyTorch, productionize models with vLLM or TGI, build offline and online evaluation "
+            "pipelines, and mentor two mid-level MLEs. Deep experience in Python (7+ years), PyTorch "
+            "(5+ years), LLM fine-tuning, vector databases, and MLOps expected. Master's in Machine "
+            "Learning or a PhD in Computer Science; native English. Contract compensation around "
+            "220,000 USD with extension option. Role is in draft status—ideal for leaders who own "
+            "model quality and deployment end-to-end."
+        ),
         "original_text": (
             "Helix AI is engaging a Lead ML Engineer on a 12-month contract to ship retrieval and re-ranking "
             "improvements to our search stack. You'll prototype with PyTorch, productionize with vLLM/TGI, and "
@@ -202,7 +242,17 @@ POSITIONS = [
         "employment_type": EmploymentType.FULL_TIME,
         "seniority_level": SeniorityLevel.JUNIOR,
         "work_arrangement": WorkArrangement.HYBRID,
-        "summary": "Join a small studio building Node + React apps for media and culture clients across Europe.",
+        "summary": (
+            "Pebble Studio, a 12-person product studio in Lisbon, sought a Junior Full-Stack Developer "
+            "on a full-time hybrid basis to build Node.js APIs and React frontends for media and "
+            "culture clients across Europe. Responsibilities included shipping features end-to-end, "
+            "pair-programming with senior engineers, writing tests, participating in code review, and "
+            "triaging bug reports. Required: JavaScript, Node.js, React, and SQL (roughly one year "
+            "each). Bachelor's in Computer Science or a diploma in Web Development; advanced English "
+            "and native Portuguese. Salary around 32,000 EUR. This position is closed and retained as "
+            "demo data—it was a strong entry role for developers growing into full-stack ownership "
+            "in a small, mentorship-heavy studio."
+        ),
         "original_text": (
             "Pebble Studio is a 12-person product studio in Lisbon. We're hiring a junior full-stack developer "
             "to ship features across Node.js APIs and React frontends. You'll be paired with a senior engineer "

@@ -25,7 +25,7 @@ import {
   CheckCircle
 } from "lucide-react"
 import { JobPositionFormData, FormErrors } from "@/types/position"
-import { CreateJobPositionDTO, JobSkill, RequirementsInput } from "@/lib/api/types"
+import { CreateJobPositionDTO, JobSkill } from "@/lib/api/types"
 import { WorkArrangement, EmploymentType, SeniorityLevel } from "@/lib/api/enums"
 import { JobPositionsClient } from "@/lib/api/job-positions-client"
 
