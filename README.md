@@ -15,16 +15,18 @@ HR / recruitment monorepo — positions, AI-assisted drafting, CVs, Celery worke
 
 **Run:** root `docker-compose.yml` · **Details:** [`CLAUDE.md`](./CLAUDE.md)
 
-## Screenshots (dark theme)
+## Screenshots
 
 <p align="center">
-  <img width="100%" alt="download" src="https://github.com/user-attachments/assets/df7aac58-753d-45fe-a5fc-4800e6f52ad3" />
+  <img width="100%" alt="Screenshot 2026-05-17 103526" src="https://github.com/user-attachments/assets/4264f4ad-2985-432c-9950-c46b80c53c75" />
 </p>
 
-- **Add position** — multi-turn chat → structured job fields
+<p align="center">
+  <img width="100%" alt="Screenshot 2026-05-17 103613" src="https://github.com/user-attachments/assets/c3ca3bf1-327a-4419-bab1-3aa2c2658a48" />
+</p>
 
 <p align="center">
-  <img width="100%" height="927" alt="download (1)" src="https://github.com/user-attachments/assets/ec2eda74-bf59-47fb-9532-6c5ba8eb8a97" />
+  <img width="100%" alt="Screenshot 2026-05-17 103124" src="https://github.com/user-attachments/assets/62150002-aae9-41d5-b5df-0ea6e989b4d9" />
 </p>
 
 - **Position** — overview + matched candidates table
